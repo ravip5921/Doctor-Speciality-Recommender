@@ -2,6 +2,8 @@ import streamlit as st
 import pickle
 import pandas as pd
 import numpy as np
+import requests
+import json
 
 # Load model and symptoms
 with open("model.pkl", "rb") as f:
@@ -18,10 +20,10 @@ def encode_symptoms(input_symptoms, all_symptoms):
             df.at[0, sym] = 1
     return df
 
-def printPrompt(symptoms, top_classes, top_probs, specialist):
-    prompt = f"""
+def make_prompt(symptoms, top_classes, top_probs, specialist):
+   return f"""
             Objective: Provide explanations of the reasoning behind doctor specialist recommendations based on a simple model that predicts disease based on disease symptoms and assigns a specialist. 
-            The goal is to enhance users’ comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
+            The goal is to enhance users' comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
 
             Input:
             - User reported symptoms: {', '.join(symptoms)}
@@ -39,9 +41,37 @@ def printPrompt(symptoms, top_classes, top_probs, specialist):
             - Do not give lengthy explanations; keep responses short, concise, and user-friendly.
             - Do not assume the user understands complex medical concepts; provide examples when necessary.
         """.strip()
-    st.markdown("### 📋 Explanation Prompt")
-    st.code(prompt)
 
+def send_prompt_to_llm(prompt):
+    # call LLM endpoint
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+    try:
+        with requests.post(API_URL, json=payload, stream=True, timeout=60) as resp:
+            resp.raise_for_status()
+            llm_reply = ""
+            container = st.empty()
+            for line in resp.iter_lines():
+                if line:
+                    try:
+                        obj = json.loads(line.decode('utf-8'))
+                        content_piece = obj.get("message", {}).get("content", "")
+                        llm_reply += content_piece
+                        container.markdown(f"### Explanation for Recommendation\n\n{llm_reply}")
+                    except json.JSONDecodeError:
+                        pass
+            return llm_reply
+    except Exception as e:
+        llm_reply = f"API request failed: {e}"
+        return None
+
+# --- API ---
+API_URL = "http://m2025.cht77.com:1334/api/chat"
+MODEL_NAME = "llama3.3:70b-instruct-q8_0"
 
 # --- UI ---
 st.title("Doctor Specialist Recommender")
@@ -110,12 +140,11 @@ if st.session_state.get("prediction_ready", False):
     st.markdown("---")
     st.markdown("**Do you want a more detailed explanation?**")
     if st.button("Yes, explain"):
-        st.session_state.explain_clicked = True
-
-if st.session_state.get("explain_clicked", False):
-    printPrompt(
-        st.session_state.selected_symptoms_clean,
-        st.session_state.top_classes,
-        st.session_state.top_probs,
-        st.session_state.specialist
-    )
+        # build prompt
+        prompt = make_prompt(
+            st.session_state.selected_symptoms_clean,
+            st.session_state.top_classes,
+            st.session_state.top_probs,
+            st.session_state.specialist
+        )
+        send_prompt_to_llm(prompt)
