@@ -19,18 +19,29 @@ def encode_symptoms(input_symptoms, all_symptoms):
     return df
 
 def printPrompt(symptoms, top_classes, top_probs, specialist):
-    prompt = (
-        f"A user used a ML system that predicts diseases based on symptoms and recommends a specialist.\n"
-        f"The user expressed the following symptoms: {', '.join(symptoms)}.\n"
-        f"The system gave the following diseases:\n"
-        f"1. {top_classes[0]} ({round(top_probs[0]*100,2)}%)\n"
-        f"2. {top_classes[1]} ({round(top_probs[1]*100,2)}%)\n"
-        f"3. {top_classes[2]} ({round(top_probs[2]*100,2)}%)\n"
-        f"Based on high confidence, the system recommended seeing a **{specialist}**.\n"
-        f"Please explain the system's reasoning in a simple way."
-    )
+    prompt = f"""
+            Objective: Provide explanations of the reasoning behind doctor specialist recommendations based on a simple model that predicts disease based on disease symptoms and assigns a specialist. 
+            The goal is to enhance users’ comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
+
+            Input:
+            - User reported symptoms: {', '.join(symptoms)}
+            - Top 3 predicted diseases: 
+            1. {top_classes[0]} ({round(top_probs[0]*100, 2)}%)
+            2. {top_classes[1]} ({round(top_probs[1]*100, 2)}%)
+            3. {top_classes[2]} ({round(top_probs[2]*100, 2)}%)
+            - Recommended specialist: {specialist} 
+
+            Expected Outcome:
+            Users should gain a clear understanding of why specific diseases were predicted, with explanations tailored to their symptom profile. Users should be able to grasp the concepts of probability-based recommendation and symptom-disease matching.
+
+            Guidelines:
+            - Do not provide overly technical jargon unless asked by the user.
+            - Do not give lengthy explanations; keep responses short, concise, and user-friendly.
+            - Do not assume the user understands complex medical concepts; provide examples when necessary.
+        """.strip()
     st.markdown("### 📋 Explanation Prompt")
     st.code(prompt)
+
 
 # --- UI ---
 st.title("Doctor Specialist Recommender")
