@@ -6,12 +6,14 @@ import requests
 import json
 
 # Load LLM API config
-with open("config.json", "r") as f:
-    config = json.load(f)
+# with open("config.json", "r") as f:
+#     config = json.load(f)
 
-API_URL = config["API_URL"]
-MODEL_NAME = config["MODEL_NAME"]
+# API_URL = config["API_URL"]
+# MODEL_NAME = config["MODEL_NAME"]
 
+API_URL = st.secrets["api"]["url"]
+MODEL_NAME = st.secrets["api"]["model"]
 # Load model and symptoms
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
