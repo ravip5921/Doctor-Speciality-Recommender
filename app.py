@@ -5,12 +5,31 @@ import numpy as np
 import requests
 import json
 
+# Load LLM API config
+with open("config.json", "r") as f:
+    config = json.load(f)
+
+API_URL = config["API_URL"]
+MODEL_NAME = config["MODEL_NAME"]
+
 # Load model and symptoms
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
 with open("symptoms.pkl", "rb") as f:
     symptoms = pickle.load(f)
+
+
+# --- Session state inits ---
+for key, default in [
+    ("prediction_ready", False),
+    ("initial_prompt_sent", False),
+    ("chat_history", []),
+    ("chat_html", ""),
+    ("rerender", False)
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 def encode_symptoms(input_symptoms, all_symptoms):
     df = pd.DataFrame(0, index=[0], columns=all_symptoms)
@@ -42,36 +61,30 @@ def make_prompt(symptoms, top_classes, top_probs, specialist):
             - Do not assume the user understands complex medical concepts; provide examples when necessary.
         """.strip()
 
-def send_prompt_to_llm(prompt):
-    # call LLM endpoint
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
+def stream_to_llm(history, container):
+    payload = {"model": MODEL_NAME, "messages": history}
     try:
-        with requests.post(API_URL, json=payload, stream=True, timeout=60) as resp:
-            resp.raise_for_status()
-            llm_reply = ""
-            container = st.empty()
-            for line in resp.iter_lines():
-                if line:
-                    try:
-                        obj = json.loads(line.decode('utf-8'))
-                        content_piece = obj.get("message", {}).get("content", "")
-                        llm_reply += content_piece
-                        container.markdown(f"### Explanation for Recommendation\n\n{llm_reply}")
-                    except json.JSONDecodeError:
-                        pass
-            return llm_reply
+        with requests.post(API_URL, json=payload, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            current = "<div class='assistant-msg'><b>🤖</b> "
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                obj = json.loads(line)
+                piece = obj.get("message", {}).get("content", "")
+                current += piece
+                # update container
+                container.markdown(f"<div class='scrollbox'>{st.session_state.chat_html + current}</div>",
+                                   unsafe_allow_html=True)
+            # close this assistant block
+            current += "</div>"
+            st.session_state.chat_html += current
+            return True
     except Exception as e:
-        llm_reply = f"API request failed: {e}"
-        return None
-
-# --- API ---
-API_URL = "http://m2025.cht77.com:1334/api/chat"
-MODEL_NAME = "llama3.3:70b-instruct-q8_0"
+        err = f"<div class='assistant-msg'><b>🤖</b> Error: {e}</div>"
+        st.session_state.chat_html += err
+        container.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
+        return False
 
 # --- UI ---
 st.title("Doctor Specialist Recommender")
@@ -114,11 +127,15 @@ if st.button("Predict"):
         st.session_state.top_classes = top_classes
         st.session_state.top_probs = top_probs
         st.session_state.specialist = specialist
+        st.session_state.initial_prompt_sent = False
+        st.session_state.chat_history = []
+        st.session_state.chat_html = ""
+        st.session_state.show_chat_box = False
 
-        # Reset explain_clicked on new prediction
-        st.session_state.explain_clicked = False
 
-# Show prompt if "Yes, explain" is clicked
+
+
+# --- Show Prediction ---
 if st.session_state.get("prediction_ready", False):
     selected_symptoms_clean = st.session_state.selected_symptoms_clean
     top_classes = st.session_state.top_classes
@@ -139,12 +156,57 @@ if st.session_state.get("prediction_ready", False):
 
     st.markdown("---")
     st.markdown("**Do you want a more detailed explanation?**")
-    if st.button("Yes, explain"):
-        # build prompt
-        prompt = make_prompt(
-            st.session_state.selected_symptoms_clean,
-            st.session_state.top_classes,
-            st.session_state.top_probs,
-            st.session_state.specialist
-        )
-        send_prompt_to_llm(prompt)
+    if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
+        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist)
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        st.session_state.initial_prompt_sent = True
+        st.session_state.show_chat_box = True
+
+
+        st.markdown("---")
+        st.markdown("### 💬 Explanation and Follow-ups")
+
+        st.markdown("""
+        <style>
+            .scrollbox {
+                height: 300px;
+                overflow-y: scroll;
+                border: 1px solid #ddd;
+                padding: 10px;
+                border-radius: 10px;
+                background-color: #f9f9f9;
+                font-size: 0.95rem;
+            }
+            .user-msg { color: #3366cc; margin-bottom: 0.5em; }
+            .assistant-msg { color: #009966; margin-bottom: 1em; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        if not st.session_state.rerender:
+            chat_box = st.empty()
+            chat_box.markdown("<div class='scrollbox'></div>", unsafe_allow_html=True)
+
+            # Start LLM streaming explanation
+            stream_to_llm(st.session_state.chat_history, chat_box)
+
+# --- Follow-up form and stream response---
+if st.session_state.initial_prompt_sent:
+    st.session_state.rerender = True
+    # re-render existing
+    chat_box = st.empty()
+    chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
+                      unsafe_allow_html=True)
+
+    with st.form("followup"):
+        followup = st.text_input("💬 Follow up?")
+        send = st.form_submit_button("Send")
+
+    if send and followup:
+        st.session_state.chat_history.append({"role":"user","content":followup})
+        st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {followup}</div>"
+        # re-render with user msg
+        chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
+                          unsafe_allow_html=True)
+
+        # stream the assistant reply
+        stream_to_llm(st.session_state.chat_history, chat_box)

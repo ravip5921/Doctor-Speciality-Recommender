@@ -1,0 +1,4 @@
+{
+    "API_URL": "http://m2025.cht77.com:1334/api/chat",
+    "MODEL_NAME": "llama3.3:70b-instruct-q8_0"
+}
