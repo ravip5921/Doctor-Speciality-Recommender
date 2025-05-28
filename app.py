@@ -26,7 +26,8 @@ for key, default in [
     ("initial_prompt_sent", False),
     ("chat_history", []),
     ("chat_html", ""),
-    ("rerender", False)
+    ("explain_clicked", False),
+    ("selected_symptoms_clean", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -130,13 +131,11 @@ if st.button("Predict"):
         st.session_state.initial_prompt_sent = False
         st.session_state.chat_history = []
         st.session_state.chat_html = ""
-        st.session_state.show_chat_box = False
-
-
+        st.session_state.explain_clicked = False
 
 
 # --- Show Prediction ---
-if st.session_state.get("prediction_ready", False):
+if st.session_state.prediction_ready:
     selected_symptoms_clean = st.session_state.selected_symptoms_clean
     top_classes = st.session_state.top_classes
     top_probs = st.session_state.top_probs
@@ -155,45 +154,47 @@ if st.session_state.get("prediction_ready", False):
     st.info(f"Recommended specialist for **{main_pred}**: **{specialist}**")
 
     st.markdown("---")
-    st.markdown("**Do you want a more detailed explanation?**")
-    if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
-        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist)
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        st.session_state.initial_prompt_sent = True
-        st.session_state.show_chat_box = True
+    if not st.session_state.explain_clicked:
+        st.markdown("**Do you want a more detailed explanation?**")
+        if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
+            st.session_state.explain_clicked = True
+        
+# --- Explanation and Follow ups ---
+if st.session_state.explain_clicked:
+    st.markdown("### 💬 Explanation and Follow-ups")
 
 
-        st.markdown("---")
-        st.markdown("### 💬 Explanation and Follow-ups")
+chat_box = st.empty()
+if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
+    st.markdown("""
+    <style>
+        .scrollbox {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+            font-size: 0.95rem;
+        }
+        .user-msg { color: #3366cc; margin-bottom: 0.5em; }
+        .assistant-msg { color: #009966; margin-bottom: 1em; }
+    </style>
+    """, unsafe_allow_html=True)
+    chat_box.markdown("<div class='scrollbox'></div>", unsafe_allow_html=True)
 
-        st.markdown("""
-        <style>
-            .scrollbox {
-                height: 300px;
-                overflow-y: scroll;
-                border: 1px solid #ddd;
-                padding: 10px;
-                border-radius: 10px;
-                background-color: #f9f9f9;
-                font-size: 0.95rem;
-            }
-            .user-msg { color: #3366cc; margin-bottom: 0.5em; }
-            .assistant-msg { color: #009966; margin-bottom: 1em; }
-        </style>
-        """, unsafe_allow_html=True)
+if st.session_state.explain_clicked:
+    prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist)
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
+    st.session_state.initial_prompt_sent = True
+    st.session_state.explain_clicked = False
+    
 
-        if not st.session_state.rerender:
-            chat_box = st.empty()
-            chat_box.markdown("<div class='scrollbox'></div>", unsafe_allow_html=True)
-
-            # Start LLM streaming explanation
-            stream_to_llm(st.session_state.chat_history, chat_box)
+    # Start LLM streaming explanation
+    stream_to_llm(st.session_state.chat_history, chat_box)
 
 # --- Follow-up form and stream response---
 if st.session_state.initial_prompt_sent:
-    st.session_state.rerender = True
-    # re-render existing
-    chat_box = st.empty()
     chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
                       unsafe_allow_html=True)
 
@@ -203,7 +204,7 @@ if st.session_state.initial_prompt_sent:
 
     if send and followup:
         st.session_state.chat_history.append({"role":"user","content":followup})
-        st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {followup}</div>"
+        st.session_state.chat_html += f"<div class='user-msg'><br/><b>🧑</b>{followup}<br/></div>"
         # re-render with user msg
         chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
                           unsafe_allow_html=True)
