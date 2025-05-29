@@ -87,7 +87,11 @@ def stream_to_llm(history, container):
                                    unsafe_allow_html=True)
             # close this assistant block
             current += "</div>"
+            # Strip HTML before storing in chat history
+            rawChat = current.replace("<div class='assistant-msg'><b>🤖</b> ", "").replace("</div>", "")
             st.session_state.chat_html += current
+            # Append raw text to history
+            st.session_state.chat_history.append({"role": "assistant", "content": rawChat})
             return True
     except Exception as e:
         err = f"<div class='assistant-msg'><b>🤖</b> Error: {e}</div>"
@@ -199,7 +203,10 @@ if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
 
 if st.session_state.explain_clicked:
     prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist)
-    st.session_state.chat_history.append({"role": "user", "content": prompt})
+    st.session_state.chat_history = [
+        {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
+        {"role": "user",   "content": prompt}
+    ]    
     st.session_state.initial_prompt_sent = True
     st.session_state.explain_clicked = False
     
