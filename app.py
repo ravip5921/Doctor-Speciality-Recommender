@@ -213,8 +213,10 @@ if st.session_state.initial_prompt_sent:
                       unsafe_allow_html=True)
 
     with st.form("followup"):
-        followup = st.text_input("💬 Follow up?")
-        send = st.form_submit_button("Send")
+        cols = st.columns([ 4, 0.5]) 
+        # cols[0].write("💬")
+        followup = cols[0].text_input("", label_visibility="collapsed")
+        send = cols[1].form_submit_button("➤")
 
     if send and followup:
         st.session_state.chat_history.append({"role":"user","content":followup})
