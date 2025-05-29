@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import requests
 import json
+from sklearn.preprocessing import MultiLabelBinarizer
 
 # Load LLM API config
 # with open("config.json", "r") as f:
@@ -15,11 +16,16 @@ import json
 API_URL = st.secrets["api"]["url"]
 MODEL_NAME = st.secrets["api"]["model"]
 # Load model and symptoms
-with open("model.pkl", "rb") as f:
-    model = pickle.load(f)
+with open("model/disease-model.pkl", "rb") as f:
+    disease_model = pickle.load(f)
 
-with open("symptoms.pkl", "rb") as f:
+with open("model/symptoms.pkl", "rb") as f:
     symptoms = pickle.load(f)
+
+with open("model/specialist-model.pkl", "rb") as f:
+    specialist_model = pickle.load(f)
+with open("model/mlb.pkl","rb") as f:
+    mlb = pickle.load(f)
 
 
 # --- Session state inits ---
@@ -100,9 +106,9 @@ if st.button("Predict"):
         st.warning("Please select at least one symptom.")
     else:
         input_vector = encode_symptoms(selected_symptoms, symptoms)
-        proba = model.predict_proba(input_vector)[0]
+        proba = disease_model.predict_proba(input_vector)[0]
         sorted_indices = np.argsort(proba)[::-1]
-        top_classes = model.classes_[sorted_indices[:3]]
+        top_classes = disease_model.classes_[sorted_indices[:3]]
         top_probs = proba[sorted_indices[:3]]
 
         selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
@@ -111,18 +117,24 @@ if st.button("Predict"):
         main_pred = top_classes[0]
         main_conf = round(top_probs[0] * 100, 2)
         
-        # Get specialist
-        diseaseSpecialist = pd.read_csv('doctor-disease.csv')
-        diseaseSpecialist["Disease"] = diseaseSpecialist["Disease"].str.strip().str.lower()
-        predicted_disease = main_pred.strip().lower()
-        specialist_row = diseaseSpecialist[diseaseSpecialist["Disease"] == predicted_disease]
+        # # Get specialist
+        # diseaseSpecialist = pd.read_csv('doctor-disease.csv')
+        # diseaseSpecialist["Disease"] = diseaseSpecialist["Disease"].str.strip().str.lower()
+        # predicted_disease = main_pred.strip().lower()
+        # specialist_row = diseaseSpecialist[diseaseSpecialist["Disease"] == predicted_disease]
 
-        if not specialist_row.empty:
-            specialist = specialist_row["Specialist"].values[0]
-            # st.info(f"Recommended specialist for **{main_pred}**: **{specialist}**")
-        else:
-            specialist = "Unknown"
-            st.warning(f"No specialist information found for **{main_pred}**.")
+        # if not specialist_row.empty:
+        #     specialist = specialist_row["Specialist"].values[0]
+        #     # st.info(f"Recommended specialist for **{main_pred}**: **{specialist}**")
+        # else:
+        #     specialist = "Unknown"
+        #     st.warning(f"No specialist information found for **{main_pred}**.")
+
+        top3_diseases = list(top_classes)         # e.g. ['GERD','Hepatitis E','Migraine']
+        X_spec_input = mlb.transform([top3_diseases])  # shape (1, n_diseases)
+
+        specialist = specialist_model.predict(X_spec_input)[0]
+
 
         # Save to session state
         st.session_state.prediction_ready = True
@@ -153,7 +165,7 @@ if st.session_state.prediction_ready:
     for i in range(1, 3):
         st.markdown(f"**{i}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
 
-    st.info(f"Recommended specialist for **{main_pred}**: **{specialist}**")
+    st.info(f"Recommended specialist for your likely diseases: **{specialist}**")
 
     st.markdown("---")
     if not st.session_state.explain_clicked:
