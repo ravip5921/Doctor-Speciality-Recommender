@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import requests
 import json
+import streamlit.components.v1 as components
 
 API_URL = st.secrets["api"]["url"]
 MODEL_NAME = st.secrets["api"]["model"]
@@ -44,7 +45,7 @@ def encode_symptoms(input_symptoms, all_symptoms):
 
 def make_prompt(symptoms, top_classes, top_probs, specialist):
    return f"""
-            Objective: Provide explanations of the reasoning behind doctor specialist recommendations based on a simple model that predicts disease based on disease symptoms and assigns a specialist. 
+            Provide explanations of the reasoning behind doctor specialist recommendations based on a system that comprises two simple models, the first one predicts diseases based on disease symptoms and outputs top three diseases, the second model takes the three disease labels as input and assigns a specialist. 
             The goal is to enhance users' comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
 
             Input:
@@ -76,8 +77,14 @@ def stream_to_llm(history, container):
                 obj = json.loads(line)
                 piece = obj.get("message", {}).get("content", "")
                 current += piece
+                html_code  = f"""<div id="chat" class='scrollbox'>{st.session_state.chat_html + current}</div>
+                                <script>
+                                    var chat = document.getElementById("chat");
+                                    chat.scrollTop = chat.scrollHeight;
+                                    console.log("hi");
+                                </script>"""
                 # update container
-                container.markdown(f"<div class='scrollbox'>{st.session_state.chat_html + current}</div>",
+                container.markdown(html_code,
                                    unsafe_allow_html=True)
             # close this assistant block
             current += "</div>"
@@ -90,7 +97,13 @@ def stream_to_llm(history, container):
     except Exception as e:
         err = f"<div class='assistant-msg'><b>🤖</b> Error: {e}</div>"
         st.session_state.chat_html += err
-        container.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
+        html_code = f"""<div id="chat" class='scrollbox'>{st.session_state.chat_html}</div>
+                        <script>
+                           var chat = document.getElementById("chat");
+                            chat.scrollTop = chat.scrollHeight;
+                            console.log("hi");
+                        </script>"""
+        container.markdown(html_code,unsafe_allow_html=True)
         return False
 
 # --- UI ---
@@ -192,7 +205,7 @@ if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
         .assistant-msg { color: #009966; margin-bottom: 1em; }
     </style>
     """, unsafe_allow_html=True)
-    chat_box.markdown("<div class='scrollbox'></div>", unsafe_allow_html=True)
+    chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
 
 if st.session_state.explain_clicked:
     prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist)
