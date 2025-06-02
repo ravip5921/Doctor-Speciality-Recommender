@@ -4,17 +4,10 @@ import pandas as pd
 import numpy as np
 import requests
 import json
-from sklearn.preprocessing import MultiLabelBinarizer
-
-# Load LLM API config
-# with open("config.json", "r") as f:
-#     config = json.load(f)
-
-# API_URL = config["API_URL"]
-# MODEL_NAME = config["MODEL_NAME"]
 
 API_URL = st.secrets["api"]["url"]
 MODEL_NAME = st.secrets["api"]["model"]
+
 # Load model and symptoms
 with open("model/disease-model.pkl", "rb") as f:
     disease_model = pickle.load(f)
@@ -36,6 +29,7 @@ for key, default in [
     ("chat_html", ""),
     ("explain_clicked", False),
     ("selected_symptoms_clean", None),
+    ("show_explain_option",False)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -101,7 +95,7 @@ def stream_to_llm(history, container):
 
 # --- UI ---
 st.title("Doctor Specialist Recommender")
-st.markdown("Enter 2 or 3 symptoms and get the most likely disease prediction.")
+st.markdown("Select your symptoms and get the three most likely diseases prediction.")
 
 selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
 
@@ -118,27 +112,12 @@ if st.button("Predict"):
         selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
         sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
 
-        main_pred = top_classes[0]
-        main_conf = round(top_probs[0] * 100, 2)
+        top3_diseases = list(top_classes)
+
+        # Only use top 3 labels for specialist prediction
+        X_spec_input = mlb.transform([top3_diseases])
         
-        # # Get specialist
-        # diseaseSpecialist = pd.read_csv('doctor-disease.csv')
-        # diseaseSpecialist["Disease"] = diseaseSpecialist["Disease"].str.strip().str.lower()
-        # predicted_disease = main_pred.strip().lower()
-        # specialist_row = diseaseSpecialist[diseaseSpecialist["Disease"] == predicted_disease]
-
-        # if not specialist_row.empty:
-        #     specialist = specialist_row["Specialist"].values[0]
-        #     # st.info(f"Recommended specialist for **{main_pred}**: **{specialist}**")
-        # else:
-        #     specialist = "Unknown"
-        #     st.warning(f"No specialist information found for **{main_pred}**.")
-
-        top3_diseases = list(top_classes)         # e.g. ['GERD','Hepatitis E','Migraine']
-        X_spec_input = mlb.transform([top3_diseases])  # shape (1, n_diseases)
-
         specialist = specialist_model.predict(X_spec_input)[0]
-
 
         # Save to session state
         st.session_state.prediction_ready = True
@@ -146,6 +125,8 @@ if st.button("Predict"):
         st.session_state.top_classes = top_classes
         st.session_state.top_probs = top_probs
         st.session_state.specialist = specialist
+        st.session_state.show_explain_option = True
+
         st.session_state.initial_prompt_sent = False
         st.session_state.chat_history = []
         st.session_state.chat_html = ""
@@ -163,23 +144,35 @@ if st.session_state.prediction_ready:
     main_pred = top_classes[0]
     main_conf = round(top_probs[0] * 100, 2)
 
-    st.success(f"Your symptoms {sym_str} suggest that you have **{main_pred}** with **{main_conf}%** confidence.")
+    st.success(f"Your symptoms {sym_str} suggest that you might have the following diseases with respective confidence as shown:")
 
-    st.markdown("Some other likely diseases are:")
-    for i in range(1, 3):
-        st.markdown(f"**{i}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
+    st.markdown("Top likely diseases are:")
+    for i in range(0, 3):
+        st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
 
-    st.info(f"Recommended specialist for your likely diseases: **{specialist}**")
+    st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: **{specialist}**")
 
     st.markdown("---")
-    if not st.session_state.explain_clicked:
-        st.markdown("**Do you want a more detailed explanation?**")
-        if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
-            st.session_state.explain_clicked = True
+
+# if not st.session_state['explain_clicked']:
+#     st.markdown(st.session_state['explain_clicked']) # -> False
+#     if st.session_state.prediction_ready:
+#         st.markdown("**Do you want a more detailed explanation?**")
+#         if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
+#             st.session_state.explain_clicked = True
+
+explain_container = st.empty()
+if st.session_state.show_explain_option:
+    explain_container.markdown("**Do you want a more detailed explanation?**")
+    if explain_container.button("Get Explanation"):
+        st.session_state.show_explain_option = False
+        st.session_state.explain_clicked = True
+        explain_container.empty()
         
 # --- Explanation and Follow ups ---
 if st.session_state.explain_clicked:
     st.markdown("### 💬 Explanation and Follow-ups")
+
 
 
 chat_box = st.empty()
