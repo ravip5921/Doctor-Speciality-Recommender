@@ -193,15 +193,13 @@ if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
     st.markdown("""
     <style>
         .scrollbox {
-            height: 300px;
-            overflow-y: scroll;
             border: 1px solid #ddd;
             padding: 10px;
             border-radius: 10px;
             background-color: #f9f9f9;
             font-size: 0.95rem;
         }
-        .user-msg { color: #3366cc; margin-bottom: 0.5em; }
+        .user-msg { color: #0b0c0c; margin-bottom: 0.5em; background-color: gainsboro; padding-top: 10px; padding-bottom: 10px;}
         .assistant-msg { color: #009966; margin-bottom: 1em; }
     </style>
     """, unsafe_allow_html=True)
@@ -233,7 +231,7 @@ if st.session_state.initial_prompt_sent:
 
     if send and followup:
         st.session_state.chat_history.append({"role":"user","content":followup})
-        st.session_state.chat_html += f"<div class='user-msg'><br/><b>🧑</b>{followup}<br/></div>"
+        st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b>{' ' + followup}</div>"
         # re-render with user msg
         chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
                           unsafe_allow_html=True)
