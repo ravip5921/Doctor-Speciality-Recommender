@@ -47,6 +47,25 @@ def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
    return f"""
             Provide explanations of the reasoning behind doctor specialist recommendations based on a system that comprises two simple models, the first one predicts diseases based on disease symptoms and outputs top three diseases, the second model takes the three disease labels as input and assigns a specialist. 
             The goal is to enhance users' comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
+            Below is the **exact system design** as implemented in our code:
+            
+            1. Disease Prediction Model (Random Forest):
+            - Input features: a binary symptom vector indicating presence (1) or absence (0) of each reported symptom.
+            - Architecture: RandomForestClassifier with 200 decision trees (n_estimators=200, random_state=42).
+            - For each tree:
+                • It uses Gini impurity to choose splits based on symptom presence.
+                • Each leaf node assigns a probability distribution over the set of possible diseases (proportion of training samples of each class).
+            - Final output: For an input symptom vector, each tree yields a class-probability vector; the Random Forest's disease probability is the average over all trees.
+
+            2. Specialist Recommendation Model (Multinomial Logistic Regression):
+            - Input features: one-hot encoding of the top 3 predicted disease labels from the Random Forest (i.e., a vector of length equal to the number of diseases, with ones at each of the three disease indices).
+            - Architecture: LogisticRegression(multi_class="multinomial", max_iter=500, class_weight="balanced").
+            - Model mechanics:
+                • Learns a weight matrix W and bias vector b such that for each specialist j, the model computes z_j = W_j·x + b_j.
+                • Applies the softmax function over z_j to obtain specialist probabilities.
+            - Final output: a probability distribution over specialists, from which the top 2 are selected.
+
+            System Inputs and Outputs for This Session:
 
             Input:
             - User reported symptoms: {', '.join(symptoms)}
