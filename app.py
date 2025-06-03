@@ -43,7 +43,7 @@ def encode_symptoms(input_symptoms, all_symptoms):
             df.at[0, sym] = 1
     return df
 
-def make_prompt(symptoms, top_classes, top_probs, specialist):
+def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
    return f"""
             Provide explanations of the reasoning behind doctor specialist recommendations based on a system that comprises two simple models, the first one predicts diseases based on disease symptoms and outputs top three diseases, the second model takes the three disease labels as input and assigns a specialist. 
             The goal is to enhance users' comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
@@ -54,7 +54,9 @@ def make_prompt(symptoms, top_classes, top_probs, specialist):
             1. {top_classes[0]} ({round(top_probs[0]*100, 2)}%)
             2. {top_classes[1]} ({round(top_probs[1]*100, 2)}%)
             3. {top_classes[2]} ({round(top_probs[2]*100, 2)}%)
-            - Recommended specialist: {specialist} 
+            - Recommended specialist: 
+            1. {specialist[0]} ({round(specialist_prob[0]*100, 2)}%)
+            2. {specialist[1]} ({round(specialist_prob[0]*100, 2)}%)
 
             Expected Outcome:
             Users should gain a clear understanding of why specific diseases were predicted, with explanations tailored to their symptom profile. Users should be able to grasp the concepts of probability-based recommendation and symptom-disease matching.
@@ -130,14 +132,18 @@ if st.button("Predict"):
         # Only use top 3 labels for specialist prediction
         X_spec_input = mlb.transform([top3_diseases])
         
-        specialist = specialist_model.predict(X_spec_input)[0]
+        specialist = specialist_model.predict_proba(X_spec_input)[0]
+        sorted_indices_sp = np.argsort(specialist)[::-1]
+        top_classes_sp = specialist_model.classes_[sorted_indices_sp[:3]]
+        top_probs_sp = specialist[sorted_indices_sp[:3]]
 
         # Save to session state
         st.session_state.prediction_ready = True
         st.session_state.selected_symptoms_clean = selected_symptoms_clean
         st.session_state.top_classes = top_classes
         st.session_state.top_probs = top_probs
-        st.session_state.specialist = specialist
+        st.session_state.specialists = top_classes_sp
+        st.session_state.specialists_pb = top_probs_sp
         st.session_state.show_explain_option = True
 
         st.session_state.initial_prompt_sent = False
@@ -151,7 +157,9 @@ if st.session_state.prediction_ready:
     selected_symptoms_clean = st.session_state.selected_symptoms_clean
     top_classes = st.session_state.top_classes
     top_probs = st.session_state.top_probs
-    specialist = st.session_state.specialist
+    specialist = st.session_state.specialists
+    specialist_prob = st.session_state.specialists_pb
+    specialist_prob = [round(x * 100, 2) for x in specialist_prob]
 
     sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
     main_pred = top_classes[0]
@@ -163,7 +171,7 @@ if st.session_state.prediction_ready:
     for i in range(0, 3):
         st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
 
-    st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: **{specialist}**")
+    st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
 
     st.markdown("---")
 
@@ -206,7 +214,7 @@ if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
     chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
 
 if st.session_state.explain_clicked:
-    prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist)
+    prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob)
     st.session_state.chat_history = [
         {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
         {"role": "user",   "content": prompt}
