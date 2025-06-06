@@ -24,6 +24,8 @@ with open("model/mlb.pkl","rb") as f:
 
 # --- Session state inits ---
 for key, default in [
+    ("page","home"),
+    ("user_name",""),
     ("prediction_ready", False),
     ("initial_prompt_sent", False),
     ("chat_history", []),
@@ -35,7 +37,22 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
+
+# --- Model outputs ---
+for key, default in [
+    ("top_classes", []),
+    ("top_probs", []),
+    ("specialists", []),
+    ("specialists_pb", []),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+
 def encode_symptoms(input_symptoms, all_symptoms):
+    """
+    Given a list of selected symptom names and a master list of all symptom columns,
+    return a single-row DataFrame of zeros/ones indicating which symptoms are present.
+    """
     df = pd.DataFrame(0, index=[0], columns=all_symptoms)
     for sym in input_symptoms:
         sym = sym.strip()
@@ -44,7 +61,11 @@ def encode_symptoms(input_symptoms, all_symptoms):
     return df
 
 def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
-   return f"""
+    """
+    Construct the system prompt explaining the two-model 
+    architecture and the specific inputs/outputs for this session.
+    """
+    return f"""
             Provide explanations of the reasoning behind doctor specialist recommendations based on a system that comprises two simple models, the first one predicts diseases based on disease symptoms and outputs top three diseases, the second model takes the three disease labels as input and assigns a specialist. 
             The goal is to enhance users' comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
             Below is the **exact system design** as implemented in our code:
@@ -75,7 +96,7 @@ def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
             3. {top_classes[2]} ({round(top_probs[2]*100, 2)}%)
             - Recommended specialist: 
             1. {specialist[0]} ({round(specialist_prob[0]*100, 2)}%)
-            2. {specialist[1]} ({round(specialist_prob[0]*100, 2)}%)
+            2. {specialist[1]} ({round(specialist_prob[1]*100, 2)}%)
 
             Expected Outcome:
             Users should gain a clear understanding of why specific diseases were predicted, with explanations tailored to their symptom profile. Users should be able to grasp the concepts of probability-based recommendation and symptom-disease matching.
@@ -87,6 +108,11 @@ def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
         """.strip()
 
 def stream_to_llm(history, container):
+    """
+    Send the `history` list of {"role": "...", "content": "..."} messages 
+    to the LLM API and append the assistant's streamed response to `chat_html` 
+    and `chat_history`.
+    """
     payload = {"model": MODEL_NAME, "messages": history}
     try:
         with requests.post(API_URL, json=payload, stream=True, timeout=60) as r:
@@ -127,141 +153,458 @@ def stream_to_llm(history, container):
         container.markdown(html_code,unsafe_allow_html=True)
         return False
 
-# --- UI ---
-st.title("Doctor Specialist Recommender")
-st.markdown("Select your symptoms and get the three most likely diseases prediction.")
+# HOME PAGE
 
-selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
+if st.session_state.page == "home":
+    st.title("👋 Welcome to Doctor Specialist Recommender")
+    if st.session_state.user_name == "":
+        st.markdown("### Please enter your name to get started:")
 
-if st.button("Predict"):
-    if len(selected_symptoms) < 1:
-        st.warning("Please select at least one symptom.")
-    else:
-        input_vector = encode_symptoms(selected_symptoms, symptoms)
-        proba = disease_model.predict_proba(input_vector)[0]
-        sorted_indices = np.argsort(proba)[::-1]
-        top_classes = disease_model.classes_[sorted_indices[:3]]
-        top_probs = proba[sorted_indices[:3]]
+        # 4.1) Name input
+        name_col, submit_col = st.columns([3, 1])
+        with name_col:
+            if st.session_state["user_name"] == "":
+                st.session_state["user_name"] = st.text_input("Your name:", value="", placeholder="Type your name here")
+        with submit_col:
+            if st.button("Submit Name"):
+                if st.session_state["user_name"].strip() == "":
+                    st.warning("Please enter at least one character for your name.")
+                else:
+                    st.success(f"Hello, {st.session_state['user_name'].strip()}!")
+                    st.rerun()
 
-        selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
-        sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+    # Only show the welcome text & cards if we have a name
+    if st.session_state["user_name"].strip() != "":
+        st.markdown(f"#### Hi, **{st.session_state['user_name']}**! Please choose a version below:")
+        st.markdown("")
 
-        top3_diseases = list(top_classes)
+        # 4.2) Three card-style buttons
+        c1, c2, c3 = st.columns(3, gap="large")
 
-        # Only use top 3 labels for specialist prediction
-        X_spec_input = mlb.transform([top3_diseases])
-        
-        specialist = specialist_model.predict_proba(X_spec_input)[0]
-        sorted_indices_sp = np.argsort(specialist)[::-1]
-        top_classes_sp = specialist_model.classes_[sorted_indices_sp[:3]]
-        top_probs_sp = specialist[sorted_indices_sp[:3]]
+        with c1:
+            st.info("""**Version 1**: Prediction Model and AI Chatbot.
+                    \nEnter symptoms, get diseases & specialists recommendation, and chat for detailed explanations.""")
+            if st.button("Go to Version 1"):
+                st.session_state.page = "v1"
+                # Clear any previous state for v1
+                st.session_state.prediction_ready = False
+                st.session_state.initial_prompt_sent = False
+                st.session_state.chat_history = []
+                st.session_state.chat_html = ""
+                st.session_state.explain_clicked = False
+                st.rerun()
+                
 
-        # Save to session state
-        st.session_state.prediction_ready = True
-        st.session_state.selected_symptoms_clean = selected_symptoms_clean
-        st.session_state.top_classes = top_classes
-        st.session_state.top_probs = top_probs
-        st.session_state.specialists = top_classes_sp
-        st.session_state.specialists_pb = top_probs_sp
-        st.session_state.show_explain_option = True
+        with c2:
+            st.info("""**Version 2**: Prediction Model.
+                    \nGet diseases predictions & specialists recommendations, plus a concise explanation.""")
+            if st.button("Go to Version 2"):
+                st.session_state.page = "v2"
+                st.rerun()
+                
 
-        st.session_state.initial_prompt_sent = False
-        st.session_state.chat_history = []
-        st.session_state.chat_html = ""
-        st.session_state.explain_clicked = False
+        with c3:
+            st.info("""**Version 3**: Prediction Model and AI Response.
+                    \nEnter symptoms, get diseases & specialists recommendation, and ask specified follow up questions.""")
+            if st.button("Go to Version 3"):
+                st.session_state.page = "v3"
+                st.rerun()
+                
 
-
-# --- Show Prediction ---
-if st.session_state.prediction_ready:
-    selected_symptoms_clean = st.session_state.selected_symptoms_clean
-    top_classes = st.session_state.top_classes
-    top_probs = st.session_state.top_probs
-    specialist = st.session_state.specialists
-    specialist_prob = st.session_state.specialists_pb
-    specialist_prob = [round(x * 100, 2) for x in specialist_prob]
-
-    sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
-    main_pred = top_classes[0]
-    main_conf = round(top_probs[0] * 100, 2)
-
-    st.success(f"Your symptoms {sym_str} suggest that you might have the following diseases with respective confidence as shown:")
-
-    st.markdown("Top likely diseases are:")
-    for i in range(0, 3):
-        st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
-
-    st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
-
-    st.markdown("---")
-
-# if not st.session_state['explain_clicked']:
-#     st.markdown(st.session_state['explain_clicked']) # -> False
-#     if st.session_state.prediction_ready:
-#         st.markdown("**Do you want a more detailed explanation?**")
-#         if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
-#             st.session_state.explain_clicked = True
-
-explain_container = st.empty()
-if st.session_state.show_explain_option:
-    explain_container.markdown("**Do you want a more detailed explanation?**")
-    if explain_container.button("Get Explanation"):
-        st.session_state.show_explain_option = False
-        st.session_state.explain_clicked = True
-        explain_container.empty()
-        
-# --- Explanation and Follow ups ---
-if st.session_state.explain_clicked:
-    st.markdown("### 💬 Explanation and Follow-ups")
-
-
-
-chat_box = st.empty()
-if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
-    st.markdown("""
-    <style>
-        .scrollbox {
-            border: 1px solid #ddd;
-            padding: 10px;
-            border-radius: 10px;
-            background-color: #f9f9f9;
-            font-size: 0.95rem;
-        }
-        .user-msg { color: #0b0c0c; margin-bottom: 0.5em; background-color: gainsboro; padding-top: 10px; padding-bottom: 10px;}
-        .assistant-msg { color: #009966; margin-bottom: 1em; }
-    </style>
-    """, unsafe_allow_html=True)
-    chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
-
-if st.session_state.explain_clicked:
-    prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob)
-    st.session_state.chat_history = [
-        {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
-        {"role": "user",   "content": prompt}
-    ]    
-    st.session_state.initial_prompt_sent = True
-    st.session_state.explain_clicked = False
+elif st.session_state.page == "v1":
+    # --- UI ---
+    back_col, _ = st.columns([1, 4])
+    with back_col:
+        if st.button("← Back to Home"):
+            st.session_state.page = "home"
+            st.session_state.prediction_ready = False
+            st.session_state.initial_prompt_sent = False
+            st.session_state.chat_history = []
+            st.session_state.chat_html = ""
+            st.session_state.explain_clicked = False
+            st.session_state.show_explain_option = False
+            st.rerun()
     
+    st.title("Doctor Specialist Recommender")
+    st.info("Version 1 - Prediction Model with AI Chatbot")
+    st.markdown("Select your symptoms and get the three most likely diseases prediction.")
 
-    # Start LLM streaming explanation
-    stream_to_llm(st.session_state.chat_history, chat_box)
+    selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
 
-# --- Follow-up form and stream response---
-if st.session_state.initial_prompt_sent:
-    chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
-                      unsafe_allow_html=True)
+    if st.button("Predict"):
+        if len(selected_symptoms) < 1:
+            st.warning("Please select at least one symptom.")
+        else:
+            input_vector = encode_symptoms(selected_symptoms, symptoms)
+            proba = disease_model.predict_proba(input_vector)[0]
+            sorted_indices = np.argsort(proba)[::-1]
+            top_classes = disease_model.classes_[sorted_indices[:3]]
+            top_probs = proba[sorted_indices[:3]]
 
-    with st.form("followup"):
-        cols = st.columns([ 4, 0.5]) 
-        # cols[0].write("💬")
-        followup = cols[0].text_input("", label_visibility="collapsed")
-        send = cols[1].form_submit_button("➤")
+            selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
+            sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
 
-    if send and followup:
-        st.session_state.chat_history.append({"role":"user","content":followup})
-        st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b>{' ' + followup}</div>"
-        # re-render with user msg
-        chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
-                          unsafe_allow_html=True)
+            top3_diseases = list(top_classes)
 
-        # stream the assistant reply
+            # Only use top 3 labels for specialist prediction
+            X_spec_input = mlb.transform([top3_diseases])
+            
+            specialist = specialist_model.predict_proba(X_spec_input)[0]
+            sorted_indices_sp = np.argsort(specialist)[::-1]
+            top_classes_sp = specialist_model.classes_[sorted_indices_sp[:3]]
+            top_probs_sp = specialist[sorted_indices_sp[:3]]
+
+            # Save to session state
+            st.session_state.prediction_ready = True
+            st.session_state.selected_symptoms_clean = selected_symptoms_clean
+            st.session_state.top_classes = top_classes
+            st.session_state.top_probs = top_probs
+            st.session_state.specialists = top_classes_sp
+            st.session_state.specialists_pb = top_probs_sp
+            st.session_state.show_explain_option = True
+
+            st.session_state.initial_prompt_sent = False
+            st.session_state.chat_history = []
+            st.session_state.chat_html = ""
+            st.session_state.explain_clicked = False
+            # CHECK
+            st.rerun()
+
+    # --- Show Prediction ---
+    if st.session_state.prediction_ready:
+        selected_symptoms_clean = st.session_state.selected_symptoms_clean
+        top_classes = st.session_state.top_classes
+        top_probs = st.session_state.top_probs
+        specialist = st.session_state.specialists
+        specialist_prob = st.session_state.specialists_pb
+        specialist_prob = [round(x * 100, 2) for x in specialist_prob]
+
+        sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+        main_pred = top_classes[0]
+        main_conf = round(top_probs[0] * 100, 2)
+
+        st.success(f"Your symptoms {sym_str} suggest that you might have the following diseases with respective confidence as shown:")
+
+        st.markdown("Top likely diseases are:")
+        for i in range(0, 3):
+            st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
+
+        st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
+
+        st.markdown("---")
+
+    # if not st.session_state['explain_clicked']:
+    #     st.markdown(st.session_state['explain_clicked']) # -> False
+    #     if st.session_state.prediction_ready:
+    #         st.markdown("**Do you want a more detailed explanation?**")
+    #         if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
+    #             st.session_state.explain_clicked = True
+
+    explain_container = st.empty()
+    if st.session_state.show_explain_option:
+        explain_container.markdown("**Do you want a more detailed explanation?**")
+        if explain_container.button("Get Explanation"):
+            st.session_state.show_explain_option = False
+            st.session_state.explain_clicked = True
+            explain_container.empty()
+
+            # check
+            st.rerun()
+            
+    # --- Explanation and Follow ups ---
+    if st.session_state.explain_clicked:
+        st.markdown("### 💬 Explanation and Follow-ups")
+
+
+
+    chat_box = st.empty()
+    if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
+        st.markdown("""
+        <style>
+            .scrollbox {
+                border: 1px solid #ddd;
+                padding: 10px;
+                border-radius: 10px;
+                background-color: #f9f9f9;
+                font-size: 0.95rem;
+            }
+            .user-msg { color: #0b0c0c; margin-bottom: 0.5em; background-color: gainsboro; padding-top: 10px; padding-bottom: 10px;}
+            .assistant-msg { color: #009966; margin-bottom: 1em; }
+        </style>
+        """, unsafe_allow_html=True)
+        chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
+
+    if st.session_state.explain_clicked:
+        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob)
+        st.session_state.chat_history = [
+            {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
+            {"role": "user",   "content": prompt}
+        ]    
+        st.session_state.initial_prompt_sent = True
+        st.session_state.explain_clicked = False
+        
+
+        # Start LLM streaming explanation
         stream_to_llm(st.session_state.chat_history, chat_box)
+
+    # --- Follow-up form and stream response---
+    if st.session_state.initial_prompt_sent:
+        chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
+                        unsafe_allow_html=True)
+
+        with st.form("followup"):
+            cols = st.columns([ 4, 0.5]) 
+            # cols[0].write("💬")
+            followup = cols[0].text_input("", label_visibility="collapsed")
+            send = cols[1].form_submit_button("➤")
+
+        if send and followup:
+            st.session_state.chat_history.append({"role":"user","content":followup})
+            st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b>{' ' + followup}</div>"
+            # re-render with user msg
+            chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
+                            unsafe_allow_html=True)
+
+            # stream the assistant reply
+            stream_to_llm(st.session_state.chat_history, chat_box)
+
+
+elif st.session_state.page == "v2":
+    # --- UI ---
+    back_col, _ = st.columns([1, 4])
+    with back_col:
+        if st.button("← Back to Home"):
+            st.session_state.page = "home"
+            st.session_state.prediction_ready = False
+            st.session_state.initial_prompt_sent = False
+            st.session_state.chat_history = []
+            st.session_state.chat_html = ""
+            st.session_state.explain_clicked = False
+            st.session_state.show_explain_option = False
+            st.rerun()
+    
+    st.title("Doctor Specialist Recommender")
+    st.info("Version 2 - Prediction Model")
+    st.markdown("Select your symptoms and get the three most likely diseases prediction.")
+
+    selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
+
+    if st.button("Predict"):
+        if len(selected_symptoms) < 1:
+            st.warning("Please select at least one symptom.")
+        else:
+            input_vector = encode_symptoms(selected_symptoms, symptoms)
+            proba = disease_model.predict_proba(input_vector)[0]
+            sorted_indices = np.argsort(proba)[::-1]
+            top_classes = disease_model.classes_[sorted_indices[:3]]
+            top_probs = proba[sorted_indices[:3]]
+
+            selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
+            sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+
+            top3_diseases = list(top_classes)
+
+            # Only use top 3 labels for specialist prediction
+            X_spec_input = mlb.transform([top3_diseases])
+            
+            specialist = specialist_model.predict_proba(X_spec_input)[0]
+            sorted_indices_sp = np.argsort(specialist)[::-1]
+            top_classes_sp = specialist_model.classes_[sorted_indices_sp[:3]]
+            top_probs_sp = specialist[sorted_indices_sp[:3]]
+
+            # Save to session state
+            st.session_state.prediction_ready = True
+            st.session_state.selected_symptoms_clean = selected_symptoms_clean
+            st.session_state.top_classes = top_classes
+            st.session_state.top_probs = top_probs
+            st.session_state.specialists = top_classes_sp
+            st.session_state.specialists_pb = top_probs_sp
+            st.session_state.show_explain_option = True
+
+            st.session_state.initial_prompt_sent = False
+            st.session_state.chat_history = []
+            st.session_state.chat_html = ""
+            st.session_state.explain_clicked = False
+            # CHECK
+            st.rerun()
+
+    # --- Show Prediction ---
+    if st.session_state.prediction_ready:
+        selected_symptoms_clean = st.session_state.selected_symptoms_clean
+        top_classes = st.session_state.top_classes
+        top_probs = st.session_state.top_probs
+        specialist = st.session_state.specialists
+        specialist_prob = st.session_state.specialists_pb
+        specialist_prob = [round(x * 100, 2) for x in specialist_prob]
+
+        sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+        main_pred = top_classes[0]
+        main_conf = round(top_probs[0] * 100, 2)
+
+        st.success(f"Your symptoms {sym_str} suggest that you might have the following diseases with respective confidence as shown:")
+
+        st.markdown("Top likely diseases are:")
+        for i in range(0, 3):
+            st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
+
+        st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
+
+        st.markdown("---")
+
+elif st.session_state.page == "v3":
+    # --- UI ---
+    back_col, _ = st.columns([1, 4])
+    with back_col:
+        if st.button("← Back to Home"):
+            st.session_state.page = "home"
+            st.session_state.prediction_ready = False
+            st.session_state.initial_prompt_sent = False
+            st.session_state.chat_history = []
+            st.session_state.chat_html = ""
+            st.session_state.explain_clicked = False
+            st.session_state.show_explain_option = False
+            st.rerun()
+    
+    st.title("Doctor Specialist Recommender")
+    st.info("Version 3 - Prediction Model with AI Chatbot")
+    st.markdown("Select your symptoms and get the three most likely diseases prediction.")
+
+    selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
+
+    if st.button("Predict"):
+        if len(selected_symptoms) < 1:
+            st.warning("Please select at least one symptom.")
+        else:
+            input_vector = encode_symptoms(selected_symptoms, symptoms)
+            proba = disease_model.predict_proba(input_vector)[0]
+            sorted_indices = np.argsort(proba)[::-1]
+            top_classes = disease_model.classes_[sorted_indices[:3]]
+            top_probs = proba[sorted_indices[:3]]
+
+            selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
+            sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+
+            top3_diseases = list(top_classes)
+
+            # Only use top 3 labels for specialist prediction
+            X_spec_input = mlb.transform([top3_diseases])
+            
+            specialist = specialist_model.predict_proba(X_spec_input)[0]
+            sorted_indices_sp = np.argsort(specialist)[::-1]
+            top_classes_sp = specialist_model.classes_[sorted_indices_sp[:3]]
+            top_probs_sp = specialist[sorted_indices_sp[:3]]
+
+            # Save to session state
+            st.session_state.prediction_ready = True
+            st.session_state.selected_symptoms_clean = selected_symptoms_clean
+            st.session_state.top_classes = top_classes
+            st.session_state.top_probs = top_probs
+            st.session_state.specialists = top_classes_sp
+            st.session_state.specialists_pb = top_probs_sp
+            st.session_state.show_explain_option = True
+
+            st.session_state.initial_prompt_sent = False
+            st.session_state.chat_history = []
+            st.session_state.chat_html = ""
+            st.session_state.explain_clicked = False
+            # CHECK
+            st.rerun()
+
+    # --- Show Prediction ---
+    if st.session_state.prediction_ready:
+        selected_symptoms_clean = st.session_state.selected_symptoms_clean
+        top_classes = st.session_state.top_classes
+        top_probs = st.session_state.top_probs
+        specialist = st.session_state.specialists
+        specialist_prob = st.session_state.specialists_pb
+        specialist_prob = [round(x * 100, 2) for x in specialist_prob]
+
+        sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+        main_pred = top_classes[0]
+        main_conf = round(top_probs[0] * 100, 2)
+
+        st.success(f"Your symptoms {sym_str} suggest that you might have the following diseases with respective confidence as shown:")
+
+        st.markdown("Top likely diseases are:")
+        for i in range(0, 3):
+            st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
+
+        st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
+
+        st.markdown("---")
+
+    # if not st.session_state['explain_clicked']:
+    #     st.markdown(st.session_state['explain_clicked']) # -> False
+    #     if st.session_state.prediction_ready:
+    #         st.markdown("**Do you want a more detailed explanation?**")
+    #         if st.button("Yes, explain") and not st.session_state.initial_prompt_sent:
+    #             st.session_state.explain_clicked = True
+
+    explain_container = st.empty()
+    if st.session_state.show_explain_option:
+        explain_container.markdown("**Do you want a more detailed explanation?**")
+        if explain_container.button("Get Explanation"):
+            st.session_state.show_explain_option = False
+            st.session_state.explain_clicked = True
+            explain_container.empty()
+
+            # check
+            st.rerun()
+            
+    # --- Explanation and Follow ups ---
+    if st.session_state.explain_clicked:
+        st.markdown("### 💬 Explanation and Follow-ups")
+
+
+
+    chat_box = st.empty()
+    if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
+        st.markdown("""
+        <style>
+            .scrollbox {
+                border: 1px solid #ddd;
+                padding: 10px;
+                border-radius: 10px;
+                background-color: #f9f9f9;
+                font-size: 0.95rem;
+            }
+            .user-msg { color: #0b0c0c; margin-bottom: 0.5em; background-color: gainsboro; padding-top: 10px; padding-bottom: 10px;}
+            .assistant-msg { color: #009966; margin-bottom: 1em; }
+        </style>
+        """, unsafe_allow_html=True)
+        chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
+
+    if st.session_state.explain_clicked:
+        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob)
+        st.session_state.chat_history = [
+            {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
+            {"role": "user",   "content": prompt}
+        ]    
+        st.session_state.initial_prompt_sent = True
+        st.session_state.explain_clicked = False
+        
+
+        # Start LLM streaming explanation
+        stream_to_llm(st.session_state.chat_history, chat_box)
+
+    # --- Follow-up form and stream response---
+    if st.session_state.initial_prompt_sent:
+        chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
+                        unsafe_allow_html=True)
+
+        with st.form("followup"):
+            cols = st.columns([ 4, 0.5]) 
+            # cols[0].write("💬")
+            followup = cols[0].text_input("", label_visibility="collapsed")
+            send = cols[1].form_submit_button("➤")
+
+        if send and followup:
+            st.session_state.chat_history.append({"role":"user","content":followup})
+            st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b>{' ' + followup}</div>"
+            # re-render with user msg
+            chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
+                            unsafe_allow_html=True)
+
+            # stream the assistant reply
+            stream_to_llm(st.session_state.chat_history, chat_box)
+
