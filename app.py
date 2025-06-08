@@ -183,7 +183,7 @@ if st.session_state.page == "home":
 
         with c1:
             st.info("""**Version 1**: Prediction Model.
-                    \nGet diseases predictions & specialists recommendations, plus a concise explanation.""")
+                    \nGet diseases predictions & specialists recommendations.""")
             if st.button("Go to Version 1"):
                 st.session_state.page = "v1"
                 st.rerun()
