@@ -1,0 +1,6 @@
+streamlit
+pickle-mixin
+pandas
+numpy
+requests
+json
