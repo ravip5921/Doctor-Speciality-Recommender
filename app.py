@@ -156,7 +156,7 @@ def stream_to_llm(history, container):
 # HOME PAGE
 
 if st.session_state.page == "home":
-    st.title("👋 Welcome to Doctor Specialist Recommender")
+    st.title("Doctor Specialist Recommender")
     if st.session_state.user_name == "":
         st.markdown("### Please enter your name to get started:")
 
