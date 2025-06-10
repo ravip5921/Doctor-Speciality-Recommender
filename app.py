@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import requests
 import json
-import streamlit.components.v1 as components
+import random
 
 API_URL = st.secrets["api"]["url"]
 MODEL_NAME = st.secrets["api"]["model"]
@@ -21,6 +21,15 @@ with open("model/specialist-model.pkl", "rb") as f:
 with open("model/mlb.pkl","rb") as f:
     mlb = pickle.load(f)
 
+# Load Patient Scenarios
+
+# Load scenarios from markdown file
+def load_scenarios(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        scenarios = file.read().split("---")  # "---" as a separator
+    scenarios = [ x.strip() for x in scenarios]
+    return scenarios
+
 
 # --- Session state inits ---
 for key, default in [
@@ -32,7 +41,8 @@ for key, default in [
     ("chat_html", ""),
     ("explain_clicked", False),
     ("selected_symptoms_clean", None),
-    ("show_explain_option",False)
+    ("show_explain_option",False),
+    ("scenarios_loaded",False)
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -60,14 +70,15 @@ def encode_symptoms(input_symptoms, all_symptoms):
             df.at[0, sym] = 1
     return df
 
-def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
+def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob, scenario):
     """
     Construct the system prompt explaining the two-model 
     architecture and the specific inputs/outputs for this session.
     """
     return f"""
             Provide explanations of the reasoning behind doctor specialist recommendations based on a system that comprises two simple models, the first one predicts diseases based on disease symptoms and outputs top three diseases, the second model takes the three disease labels as input and assigns a specialist. 
-            The goal is to enhance users' comprehension of how their symptoms can be related with those of some disease and why they should consult a particular specialist. 
+            The users are presented with a patient scenario and they input symptoms based on that particular scenario to the system to get recommendations.
+            The goal is to enhance users' comprehension of how the symptoms can be related with those of some disease and why the patient should consult a particular specialist. 
             Below is the **exact system design** as implemented in our code:
             
             1. Disease Prediction Model (Random Forest):
@@ -89,6 +100,7 @@ def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob):
             System Inputs and Outputs for This Session:
 
             Input:
+            - Patient Scenario: {scenario}
             - User reported symptoms: {', '.join(symptoms)}
             - Top 3 predicted diseases: 
             1. {top_classes[0]} ({round(top_probs[0]*100, 2)}%)
@@ -161,18 +173,24 @@ if st.session_state.page == "home":
         st.markdown("### Please enter your name to get started:")
 
         # 4.1) Name input
-        name_col, submit_col = st.columns([3, 1])
+        name_col, submit_col = st.columns([3, 1], vertical_alignment="bottom")
         with name_col:
             if st.session_state["user_name"] == "":
                 st.session_state["user_name"] = st.text_input("Your name:", value="", placeholder="Type your name here")
         with submit_col:
-            if st.button("Submit Name"):
+            if st.button("Start"):
                 if st.session_state["user_name"].strip() == "":
                     st.warning("Please enter at least one character for your name.")
                 else:
                     st.success(f"Hello, {st.session_state['user_name'].strip()}!")
                     st.rerun()
-
+    
+    if not st.session_state.scenarios_loaded:            
+        scenarios = load_scenarios("patient-scenarios.md")
+        random.shuffle(scenarios)
+        # Keep 3 scenarios
+        st.session_state.selected_scenarios = scenarios[:3] if len(scenarios) >= 3 else scenarios
+        st.session_state.scenarios_loaded = True
     # Only show the welcome text & cards if we have a name
     if st.session_state["user_name"].strip() != "":
         st.markdown(f"#### Hi, **{st.session_state['user_name']}**! Please choose a version below:")
@@ -233,10 +251,15 @@ elif st.session_state.page == "v3":
             st.rerun()
     
     st.title("Doctor Specialist Recommender")
-    st.info("Version 3 - Prediction Model with AI Chatbot")
-    st.markdown("Select your symptoms and get the three most likely diseases prediction.")
+    st.subheader("Version 3 - Prediction Model with AI Chatbot")
+    st.divider()
 
-    selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
+    st.markdown("_Patient Scenario:_")
+    scenario = st.session_state.selected_scenarios[2]
+    st.info(scenario)
+    st.markdown("Select relevant symptoms for this case and get the three most likely diseases prediction.")
+
+    selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
 
     if st.button("Predict"):
         if len(selected_symptoms) < 1:
@@ -294,9 +317,9 @@ elif st.session_state.page == "v3":
 
         st.markdown("Top likely diseases are:")
         for i in range(0, 3):
-            st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
+            st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)} % confidence)")
 
-        st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
+        st.info(f"For these diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialist[0]}** ({specialist_prob[0]} % confidence)\n- **{specialist[1]}** ({specialist_prob[1]} % confidence)")
 
         st.markdown("---")
 
@@ -342,7 +365,7 @@ elif st.session_state.page == "v3":
         chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
 
     if st.session_state.explain_clicked:
-        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob)
+        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob, scenario)
         st.session_state.chat_history = [
             {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
             {"role": "user",   "content": prompt}
@@ -391,10 +414,15 @@ elif st.session_state.page == "v1":
             st.rerun()
     
     st.title("Doctor Specialist Recommender")
-    st.info("Version 1 - Prediction Model")
-    st.markdown("Select your symptoms and get the three most likely diseases prediction.")
+    st.subheader("Version 1 - Prediction Model")
+    st.divider()
 
-    selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
+    st.markdown("_Patient Scenario:_")
+    scenario = st.session_state.selected_scenarios[0]
+    st.info(scenario)
+    st.markdown("Select relevant symptoms for this case and get the three most likely diseases prediction.")
+
+    selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
 
     if st.button("Predict"):
         if len(selected_symptoms) < 1:
@@ -474,10 +502,15 @@ elif st.session_state.page == "v2":
             st.rerun()
     
     st.title("Doctor Specialist Recommender")
-    st.info("Version 2 - Prediction Model with AI Chatbot")
-    st.markdown("Select your symptoms and get the three most likely diseases prediction.")
+    st.subheader("Version 2 - Prediction Model with AI Chatbot")
+    st.divider()
 
-    selected_symptoms = st.multiselect("Select your symptoms:", options=symptoms)
+    st.markdown("_Patient Scenario:_")
+    scenario = st.session_state.selected_scenarios[1]
+    st.info(scenario)
+    st.markdown("Select relevant symptoms for this case and get the three most likely diseases prediction.")
+
+    selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
 
     if st.button("Predict"):
         if len(selected_symptoms) < 1:
@@ -576,7 +609,7 @@ elif st.session_state.page == "v2":
         chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
 
     if st.session_state.explain_clicked:
-        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob)
+        prompt = make_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob, scenario)
         st.session_state.chat_history = [
             {"role": "system", "content": "You are a helpful medical explainer who explans the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on input symtoms and the second one recommends a specialist based on the top 3 predicted likely diseases."},
             {"role": "user",   "content": prompt}
