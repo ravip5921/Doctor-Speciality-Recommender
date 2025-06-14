@@ -257,7 +257,7 @@ elif st.session_state.page == "v3":
     st.markdown("_Patient Scenario:_")
     scenario = st.session_state.selected_scenarios[2]
     st.info(scenario)
-    st.markdown("Select relevant symptoms for this case and get the three most likely diseases prediction.")
+    st.markdown("Select relevant symptoms for this case and get system's recommendations.")
 
     selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
 
@@ -420,7 +420,7 @@ elif st.session_state.page == "v1":
     st.markdown("_Patient Scenario:_")
     scenario = st.session_state.selected_scenarios[0]
     st.info(scenario)
-    st.markdown("Select relevant symptoms for this case and get the three most likely diseases prediction.")
+    st.markdown("Select relevant symptoms for this case and get system's recommendations.")
 
     selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
 
@@ -508,7 +508,7 @@ elif st.session_state.page == "v2":
     st.markdown("_Patient Scenario:_")
     scenario = st.session_state.selected_scenarios[1]
     st.info(scenario)
-    st.markdown("Select relevant symptoms for this case and get the three most likely diseases prediction.")
+    st.markdown("Select relevant symptoms for this case and get system's recommendations.")
 
     selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
 
@@ -628,10 +628,12 @@ elif st.session_state.page == "v2":
         )
 
         questions = [
-            "Can you explain how symptom matching works?",
-            "Why is Gini impurity used in the Random Forest?",
-            "How does the logistic regression choose a specialist?",
-            "What does a 1% increase in probability signify?"
+            "Can you explain step by step how symptoms are mapped to disease predictions?",
+            "How does the model decide the confidence percentages for each of the top three diseases?",
+            "Once the diseases are predicted, how does the system recommend the top 2 specialists?",
+            "What mathematical function does the system use to turn scores into probabilities for specialists?",
+            "Can you give me a simple example with some symptoms and walk me through the entire prediction process?",
+            "How would changing or removing one symptom affect the disease and specialist predictions?"
         ]
         idx = st.session_state.followup_idx
 
