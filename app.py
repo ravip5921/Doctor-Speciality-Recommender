@@ -382,7 +382,7 @@ elif st.session_state.page == "v3":
         chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
                         unsafe_allow_html=True)
 
-        with st.form("followup"):
+        with st.form("followup",clear_on_submit=True):
             cols = st.columns([ 4, 0.5]) 
             # cols[0].write("💬")
             followup = cols[0].text_input("", label_visibility="collapsed")
