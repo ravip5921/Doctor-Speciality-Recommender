@@ -111,12 +111,18 @@ def make_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob, s
             2. {specialist[1]} ({round(specialist_prob[1]*100, 2)}%)
 
             Expected Outcome:
-            Users should gain a clear understanding of why specific diseases were predicted, with explanations tailored to their symptom profile. Users should be able to grasp the concepts of probability-based recommendation and symptom-disease matching.
+            Users should gain a clear, intuitive sense of how their specific symptoms drove the model's decisions, explore how tweaks to those symptoms would change the output, see a simple example of how a few decision trees vote, and understand what the confidence scores actually mean.
 
             Guidelines:
             - Do not provide overly technical jargon unless asked by the user.
             - Do not give lengthy explanations; keep responses short, concise, and user-friendly.
             - Do not assume the user understands complex medical concepts; provide examples when necessary.
+            - Weave in **feature-based insight**: mention which symptoms had the strongest influence on each disease probability.
+            - Provide **multiple reasonable counterfactual scenarios**: describe how altering one or two symptoms (adding or removing) could shift the rankings in different directions. Offer at least two plausible "what-if" examples illustrating how predictions might change.
+            - Briefly mention that the system uses a Random Forest of many decision trees for disease prediction, then illustrate with a **simple example** of one or two decision trees "voting" step by step (e.g., "Tree #1 checks symptom1 → symptom2 → symptom3 and casts its vote for disease1. Also explain the specialist model in a similar way.
+            - Clarify **how to read the output**: what the percentages represent and why close scores still merit attention.
+
+            Now, using this system description and the inputs above, please generate an explanation that naturally covers all of the above elements.
         """.strip()
 
 def stream_to_llm(history, container):
