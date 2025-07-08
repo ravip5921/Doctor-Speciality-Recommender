@@ -492,6 +492,72 @@ elif st.session_state.page == "v1":
 
         st.markdown("---")
 
+        st.markdown("## 📋 How the System Works")
+
+        st.markdown("""
+        When you enter symptoms, our system first predicts which diseases are most likely, then recommends which specialists you should consult. 
+        This happens in two steps: a **Random Forest** model with 200 decision trees predicts the top 3 diseases, and a **Logistic Regression** model takes those diseases and ranks the top 2 specialists.
+        
+        The Random Forest works by having many simple decision trees, each making its own prediction based on your symptoms.
+        The trees *vote*, and their predictions are averaged to produce more stable and accurate results than relying on a single tree.
+        Symptoms that often co-occurred with particular diseases in the training data, the examples the models learned from, tend to carry more weight in the prediction. 
+        However, some diseases may still appear with lower confidence scores because the system considers all plausible options, even less likely ones, rather than ignoring them completely. 
+        
+        The specialist recommendation is then made by the Logistic Regression model, which assigns probabilities to all specialists based on how well the top three predicted diseases fit their expertise.
+        It uses a mathematical function called *softmax* to distribute probabilities across all specialists, ensuring even lower-ranked ones still receive some score, reflecting that they are less likely but still plausible.
+
+        Together, these models aim to balance accuracy and coverage, providing recommendations that are reliable yet still account for less obvious possibilities.
+        """)
+
+        with st.expander("**Key Terms**", expanded=True):
+            st.markdown("""
+        - **Decision Tree:** A simple rule-based model that asks yes/no about each symptom and votes for a disease.
+        - **Random Forest:** A group of 200 decision trees. Each votes, and their results are averaged for more reliable predictions.
+        - **Logistic Regression:** A statistical model that scores each specialist based on the predicted diseases.
+        - **Confidence Score:** The percentage shown next to each disease or specialist. The higher it is, the stronger the model's belief.
+        - **Binary Vector:** A list of 1s and 0s *[Showing which symptoms you reported (1 if present, 0 if not)]*.
+        """)
+
+        # with st.expander("**Why the System Works This Way**"):
+        #     st.markdown("""
+        # - Using many trees reduces errors compared to one tree and makes predictions more stable.
+        # - Even diseases or specialists with low scores appear because the model considers all plausible options.
+        # - Some symptoms strongly point to certain diseases because they co-occurred in many training examples.
+        # - Not all specialists are recommended if no disease strongly aligns with their area.
+        # - Logistic Regression distributes probabilities across all specialists using a softmax function.
+        # - Training data is a set of past examples the models learned from.
+        # """)
+        
+
+        st.markdown("""
+        After reading this, you can proceed to the quiz.
+        """)
+
+        st.markdown("---")
+
+        # Link to Quiz
+        st.markdown(
+            """
+            <a href="https://quiz-doctor-speciality-recommender.streamlit.app/" target="_blank">
+                <button style="
+                    background-color:#4CAF50;
+                    border:none;
+                    color:white;
+                    padding:10px 20px;
+                    text-align:center;
+                    text-decoration:none;
+                    display:inline-block;
+                    font-size:16px;
+                    border-radius:5px;
+                    cursor:pointer;">
+                    Go to Quiz
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+
 elif st.session_state.page == "v2":
     # --- UI ---
     back_col, _ = st.columns([1, 4])
