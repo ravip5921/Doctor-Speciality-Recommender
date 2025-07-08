@@ -496,7 +496,7 @@ elif st.session_state.page == "v1":
 
         st.markdown("""
         When you enter symptoms, our system first predicts which diseases are most likely, then recommends which specialists you should consult. 
-        This happens in two steps: a **Random Forest** model with 200 decision trees predicts the top 3 diseases, and a **Logistic Regression** model takes those diseases and ranks the top 2 specialists.
+        This happens in two steps: a **Random Forest** model with 200 decision trees predicts the likely diseases, and a **Logistic Regression** model takes those (top 3) diseases and ranks the top 2 specialists.
         
         The Random Forest works by having many simple decision trees, each making its own prediction based on your symptoms.
         The trees *vote*, and their predictions are averaged to produce more stable and accurate results than relying on a single tree.
