@@ -171,6 +171,30 @@ def stream_to_llm(history, container):
         container.markdown(html_code,unsafe_allow_html=True)
         return False
 
+def stream_llm_api(history):
+    """
+    Sends chat history to LLM API with streaming enabled.
+    Yields pieces of the assistant's response as they arrive.
+    """
+    payload = {
+        "model": MODEL_NAME,
+        "messages": history,
+        "stream": True
+    }
+    headers = {
+        "Content-Type": "application/json"    }
+    with requests.post(API_URL, headers=headers, json=payload, stream=True, timeout=60) as resp:
+        resp.raise_for_status()
+        for line in resp.iter_lines():
+            if line:
+                try:
+                    obj = json.loads(line)
+                    content_piece = obj.get("message", {}).get("content", "")
+                    if content_piece:
+                        yield content_piece
+                except Exception:
+                    continue
+
 # HOME PAGE
 
 if st.session_state.page == "home":
@@ -734,3 +758,142 @@ elif st.session_state.page == "v2":
             )
         else:
             st.markdown("All follow-up questions completed.")
+
+# elif st.session_state.page == "v3":
+#     back_col, _ = st.columns([1, 4])
+#     with back_col:
+#         if st.button("← Back to Home"):
+#             st.session_state.page = "home"
+#             st.session_state.prediction_ready = False
+#             st.session_state.initial_prompt_sent = False
+#             st.session_state.chat_history = []
+#             st.session_state.explain_clicked = False
+#             st.session_state.show_explain_option = False
+#             st.session_state.chat_html = ""
+#             st.rerun()
+
+#     st.title("Doctor Specialist Recommender")
+#     st.subheader("Version 3 - Prediction Model with AI Chatbot")
+#     st.divider()
+
+#     st.markdown("_Patient Scenario:_")
+#     scenario = st.session_state.selected_scenarios[2]
+#     st.info(scenario)
+#     st.markdown("Select relevant symptoms for this case and get system's recommendations.")
+
+#     selected_symptoms = st.multiselect("Select symptoms:", options=symptoms)
+
+#     if st.button("Predict"):
+#         if len(selected_symptoms) < 1:
+#             st.warning("Please select at least one symptom.")
+#         else:
+#             input_vector = encode_symptoms(selected_symptoms, symptoms)
+#             proba = disease_model.predict_proba(input_vector)[0]
+#             sorted_indices = np.argsort(proba)[::-1]
+#             top_classes = disease_model.classes_[sorted_indices[:3]]
+#             top_probs = proba[sorted_indices[:3]]
+
+#             selected_symptoms_clean = [sym.replace("_", " ") for sym in selected_symptoms]
+
+#             top3_diseases = list(top_classes)
+#             X_spec_input = mlb.transform([top3_diseases])
+#             specialist = specialist_model.predict_proba(X_spec_input)[0]
+#             sorted_indices_sp = np.argsort(specialist)[::-1]
+#             top_classes_sp = specialist_model.classes_[sorted_indices_sp[:3]]
+#             top_probs_sp = specialist[sorted_indices_sp[:3]]
+
+#             st.session_state.prediction_ready = True
+#             st.session_state.selected_symptoms_clean = selected_symptoms_clean
+#             st.session_state.top_classes = top_classes
+#             st.session_state.top_probs = top_probs
+#             st.session_state.specialists = top_classes_sp
+#             st.session_state.specialists_pb = top_probs_sp
+#             st.session_state.show_explain_option = True
+
+#             st.session_state.initial_prompt_sent = False
+#             st.session_state.chat_history = []
+#             st.session_state.explain_clicked = False
+#             st.session_state.chat_html = ""
+#             st.rerun()
+
+#     # Show prediction if ready
+#     if st.session_state.prediction_ready:
+#         selected_symptoms_clean = st.session_state.selected_symptoms_clean
+#         top_classes = st.session_state.top_classes
+#         top_probs = st.session_state.top_probs
+#         specialist = st.session_state.specialists
+#         specialist_prob = [round(x * 100, 2) for x in st.session_state.specialists_pb]
+
+#         sym_str = ", ".join(selected_symptoms_clean[:-1]) + f", and {selected_symptoms_clean[-1]}" if len(selected_symptoms_clean) > 1 else selected_symptoms_clean[0]
+
+#         st.success(f"Your symptoms {sym_str} suggest these diseases:")
+#         for i in range(3):
+#             st.markdown(f"**{i+1}) {top_classes[i]}** ({round(top_probs[i]*100, 2)}% confidence)")
+
+#         st.info(f"Recommended specialists:\n- **{specialist[0]}** ({specialist_prob[0]}% confidence)\n- **{specialist[1]}** ({specialist_prob[1]}% confidence)")
+#         st.markdown("---")
+
+#     # Show option for explanation
+#     if st.session_state.show_explain_option:
+#         if st.button("Get Explanation"):
+#             st.session_state.show_explain_option = False
+#             st.session_state.explain_clicked = True
+#             st.rerun()
+
+#     # Explanation and follow-up chat UI
+#     if st.session_state.explain_clicked:
+#         st.markdown("### 💬 Explanation and Follow-ups")
+
+#         # If initial prompt not yet sent, prepare it and send
+#         if not st.session_state.initial_prompt_sent:
+#             prompt = make_prompt(
+#                 st.session_state.selected_symptoms_clean,
+#                 st.session_state.top_classes,
+#                 st.session_state.top_probs,
+#                 st.session_state.specialists,
+#                 [round(x * 100, 2) for x in st.session_state.specialists_pb],
+#                 scenario
+#             )
+#             st.session_state.chat_history = [
+#                 {"role": "system", "content": "You are a helpful medical explainer who explains the decision of two multiclass classifiers. The first one predicts user's top 3 likely diseases based on symptoms and the second recommends specialists based on those diseases."},
+#                 {"role": "user", "content": prompt}
+#             ]
+#             st.session_state.initial_prompt_sent = True
+
+#             # Stream the assistant response
+            
+#             assistant_message = ""
+#             response_container = st.empty()
+#             for chunk in stream_llm_api(st.session_state.chat_history):
+#                 assistant_message += chunk
+#                 response_container.markdown(assistant_message + "▌")
+#             response_container.markdown(assistant_message)
+
+#             st.session_state.chat_history.append({"role": "assistant", "content": assistant_message})
+#             st.rerun()
+#         else:
+#             # Show full chat history
+#             for msg in st.session_state.chat_history[2:]:
+#                 if msg["role"] == "user":
+#                     with st.chat_message("user", avatar="👤"):
+#                         st.markdown(msg["content"])
+#                 elif msg["role"] == "assistant":
+#                     with st.chat_message("assistant", avatar="🤖"):
+#                         st.markdown(msg["content"])
+
+#             # Follow-up input box
+#             prompt = st.chat_input("Ask a follow-up question...")
+#             if prompt:
+#                 st.session_state.chat_history.append({"role": "user", "content": prompt})
+#                 with st.chat_message("user", avatar="👤"):
+#                     st.markdown(prompt)
+
+#                 assistant_message = ""
+#                 response_container = st.empty()
+#                 for chunk in stream_llm_api(st.session_state.chat_history):
+#                     assistant_message += chunk
+#                     response_container.markdown(assistant_message + "▌")
+#                 response_container.markdown(assistant_message)
+
+#                 st.session_state.chat_history.append({"role": "assistant", "content": assistant_message})
+#                 st.rerun()
