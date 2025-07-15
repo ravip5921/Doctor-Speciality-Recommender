@@ -350,7 +350,7 @@ elif st.session_state.page == "v2":
             st.rerun()
     
     st.title("Doctor Specialist Recommender")
-    st.subheader("Version 3 - Prediction Model with AI Chatbot")
+    st.subheader("Version 2 - Prediction Model with AI Chatbot")
     st.divider()
 
     st.markdown("_Patient Scenario:_")
