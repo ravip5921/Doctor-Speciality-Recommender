@@ -293,7 +293,6 @@ if st.session_state.page == "home":
     if st.session_state.user_name == "":
         st.markdown("### Please enter your name to get started:")
 
-        # 4.1) Name input
         name_col, submit_col = st.columns([3, 1], vertical_alignment="bottom")
         with name_col:
             if st.session_state["user_name"] == "":
@@ -303,6 +302,8 @@ if st.session_state.page == "home":
                 if st.session_state["user_name"].strip() == "":
                     st.warning("Please enter at least one character for your name.")
                 else:
+                    import time
+                    time.sleep(2)
                     st.success(f"Hello, {st.session_state['user_name'].strip()}!")
 
                     v1_scenario = st.session_state.selected_scenarios[1]
@@ -313,8 +314,6 @@ if st.session_state.page == "home":
                             "scenario_v1": v1_scenario,
                             "scenario_v2": v2_scenario
                         }).execute()
-                    import time
-                    time.sleep(2)
                     if insert_resp:
                         print("log added")
                     else:
@@ -328,7 +327,6 @@ if st.session_state.page == "home":
                     .execute()
                 )
 
-                # 3. Save the ID to session state
                 if fetch_resp.data:
                     st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
                     print("Log 2 added.")
