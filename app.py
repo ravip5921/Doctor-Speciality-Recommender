@@ -309,31 +309,35 @@ if st.session_state.page == "home":
                     v1_scenario = st.session_state.selected_scenarios[1]
                     v2_scenario = st.session_state.selected_scenarios[2]
                     # insert scenario_log
-                    insert_resp = supabase.table("scenario_logs").insert({
+
+                    try:
+                        insert_resp = supabase.table("scenario_logs").insert({
                             "username": st.session_state["user_name"].strip(),
                             "scenario_v1": v1_scenario,
                             "scenario_v2": v2_scenario
                         }).execute()
-                    if insert_resp:
-                        print("log added")
-                    else:
-                        print("log not added.")
-                    fetch_resp = (
-                    supabase.table("scenario_logs")
-                    .select("id")
-                    .eq("username", st.session_state["user_name"].strip())
-                    .order("started_at", desc=True) 
-                    .limit(1)
-                    .execute()
-                )
+                        st.write("Scenario Log inserted.")
+                    except Exception as e:
+                        st.error(f"Insert failed: {e}")
 
-                if fetch_resp.data:
-                    st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
-                    print("Log 2 added.")
-                    import time
-                    # time.sleep(10)
-                else:
-                    st.error("Could not fetch scenario_log_id after insert.")
+                    
+                    try:
+                        fetch_resp = (
+                            supabase.table("scenario_logs")
+                            .select("id")
+                            .eq("username", st.session_state["user_name"].strip())
+                            .order("started_at", desc=True) 
+                            .limit(1)
+                            .execute()
+                        )
+
+
+                        st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
+                        print("Log 2 added.")
+                        import time
+                        # time.sleep(10)
+                    except:
+                        st.error("Could not fetch scenario_log_id after insert.")
                 
                 st.rerun()
     
