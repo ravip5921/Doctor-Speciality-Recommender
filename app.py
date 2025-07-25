@@ -5,9 +5,14 @@ import numpy as np
 import requests
 import json
 import random
+from supabase import create_client
+import uuid
 
 API_URL = st.secrets["api"]["url"]
 MODEL_NAME = st.secrets["api"]["model"]
+
+SUPABASE_URL = st.secrets["supabase"]["url"]
+SUPABASE_KEY = st.secrets["supabase"]["key"]
 
 # Load model and symptoms
 with open("model/disease-model.pkl", "rb") as f:
@@ -30,6 +35,8 @@ def load_scenarios(file_path):
     scenarios = [ x.strip() for x in scenarios]
     return scenarios
 
+# Create Supabase client for logs
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Session state inits ---
 for key, default in [
@@ -199,6 +206,7 @@ def stream_to_llm(history, container):
     and `chat_history`.
     """
     payload = {"model": MODEL_NAME, "messages": history}
+    assistant_plain = ""
     try:
         with requests.post(API_URL, json=payload, stream=True, timeout=60) as r:
             r.raise_for_status()
@@ -208,6 +216,13 @@ def stream_to_llm(history, container):
                     continue
                 obj = json.loads(line)
                 piece = obj.get("message", {}).get("content", "")
+                if not piece:
+                    continue
+
+                # accumulate plain text
+                assistant_plain += piece
+                
+                # update HTML
                 current += piece
                 html_code  = f"""<div id="chat" class='scrollbox'>{st.session_state.chat_html + current}</div>
                                 <script>
@@ -225,7 +240,7 @@ def stream_to_llm(history, container):
             st.session_state.chat_html += current
             # Append raw text to history
             st.session_state.chat_history.append({"role": "assistant", "content": rawChat})
-            return True
+            return assistant_plain
     except Exception as e:
         err = f"<div class='assistant-msg'><b>🤖</b> Error: {e}</div>"
         st.session_state.chat_html += err
@@ -262,6 +277,22 @@ def stream_llm_api(history):
                 except Exception:
                     continue
 
+
+# helper functions to log each message
+def log_message(role, text):
+    supabase.table("transcript_logs").insert({
+        "scenario_log_id": st.session_state["scenario_log_id"],
+        "role": role,
+        "text": text
+    }).execute()
+
+
+
+DEBUG = st.secrets.get("debug", False)
+
+def debug_log(msg):
+    if DEBUG:
+        st.write("DEBUG: ", msg)
 # HOME PAGE
 
 if st.session_state.page == "home":
@@ -269,18 +300,53 @@ if st.session_state.page == "home":
     if st.session_state.user_name == "":
         st.markdown("### Please enter your name to get started:")
 
-        # 4.1) Name input
         name_col, submit_col = st.columns([3, 1], vertical_alignment="bottom")
         with name_col:
             if st.session_state["user_name"] == "":
                 st.session_state["user_name"] = st.text_input("Your name:", value="", placeholder="Type your name here")
         with submit_col:
             if st.button("Start"):
+                debug_log("Start Pressed")
+
                 if st.session_state["user_name"].strip() == "":
                     st.warning("Please enter at least one character for your name.")
+                    debug_log("User Name empty after start press")
                 else:
                     st.success(f"Hello, {st.session_state['user_name'].strip()}!")
-                    st.rerun()
+                    debug_log("Username" + st.session_state['user_name'].strip())
+                    v1_scenario = st.session_state.selected_scenarios[1]
+                    v2_scenario = st.session_state.selected_scenarios[2]
+                    debug_log(v1_scenario + v2_scenario)
+                    # insert scenario_log
+                    try:
+                        debug_log("Attempting Scenario insert")
+                        insert_resp = supabase.table("scenario_logs").insert({
+                            "username": st.session_state["user_name"].strip(),
+                            "scenario_v1": v1_scenario,
+                            "scenario_v2": v2_scenario
+                        }).execute()
+                        debug_log("Scenario Log inserted.")
+                    except Exception as e:
+                        debug_log(f"Insert failed: {e}")
+
+                    
+                    try:
+                        fetch_resp = (
+                            supabase.table("scenario_logs")
+                            .select("id")
+                            .eq("username", st.session_state["user_name"].strip())
+                            .order("started_at", desc=True) 
+                            .limit(1)
+                            .execute()
+                        )
+
+
+                        st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
+                        debug_log("Scenario ID stored.")
+                    except:
+                        debug_log("Could not fetch scenario_log_id after insert.")
+                
+                st.rerun()
     
     if not st.session_state.scenarios_loaded:            
         scenarios = load_scenarios("patient-scenarios.md")
@@ -470,14 +536,15 @@ elif st.session_state.page == "v2":
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": questions[0]}
         ]    
-
+        
         st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {questions[0]}</div>"
         st.session_state.initial_prompt_sent = True
         st.session_state.explain_clicked = False
-        
+        log_message("user", questions[0])
 
         # Start LLM streaming explanation
-        stream_to_llm(st.session_state.chat_history, chat_box)
+        assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
+        log_message("assistant", assistant_text)
 
     # --- Follow-up form and stream response---
     if st.session_state.initial_prompt_sent:
@@ -490,13 +557,18 @@ elif st.session_state.page == "v2":
 
         def ask_and_advance(i):
             q = questions[i]
+
+            # Log user message
+            log_message("user", q)
+
             st.session_state.chat_history.append({"role": "user", "content": q})
             st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {q}</div>"
             chat_box.markdown(
                 f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
                 unsafe_allow_html=True
             )
-            stream_to_llm(st.session_state.chat_history, chat_box)
+            assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
+            log_message("assistant", assistant_text)
             st.session_state.followup_idx += 1
 
         if idx < len(questions):
@@ -513,14 +585,16 @@ elif st.session_state.page == "v2":
                 user_input = cols[0].text_input("", label_visibility="collapsed")
                 send = cols[1].form_submit_button("➤")
                 if send and user_input:
+                    # Log user message
+                    log_message("user", user_input)
                     st.session_state.chat_history.append({"role": "user", "content": user_input})
                     st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {user_input}</div>"
                     chat_box.markdown(
                         f"<div class='scrollbox'>{st.session_state.chat_html}</div>",
                         unsafe_allow_html=True
                     )
-                    stream_to_llm(st.session_state.chat_history, chat_box)
-
+                    assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
+                    log_message("assistant", assistant_text)
 
 elif st.session_state.page == "v1":
     # --- UI ---
