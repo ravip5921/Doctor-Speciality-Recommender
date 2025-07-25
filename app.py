@@ -288,8 +288,7 @@ def log_message(role, text):
 
 
 
-DEBUG = st.secrets.get("debug", False)
-
+DEBUG = st.secrets["params"]["debug"]
 def debug_log(msg):
     if DEBUG:
         st.write("DEBUG: ", msg)
@@ -316,7 +315,6 @@ if st.session_state.page == "home":
                     debug_log("Username" + st.session_state['user_name'].strip())
                     v1_scenario = st.session_state.selected_scenarios[1]
                     v2_scenario = st.session_state.selected_scenarios[2]
-                    debug_log(v1_scenario + v2_scenario)
                     # insert scenario_log
                     try:
                         debug_log("Attempting Scenario insert")
