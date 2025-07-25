@@ -313,8 +313,12 @@ if st.session_state.page == "home":
                             "scenario_v1": v1_scenario,
                             "scenario_v2": v2_scenario
                         }).execute()
+                    import time
+                    time.sleep(2)
                     if insert_resp:
-                        st.write("log added")
+                        print("log added")
+                    else:
+                        print("log not added.")
                     fetch_resp = (
                     supabase.table("scenario_logs")
                     .select("id")
@@ -327,9 +331,9 @@ if st.session_state.page == "home":
                 # 3. Save the ID to session state
                 if fetch_resp.data:
                     st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
-                    st.write("Log 2 added.")
+                    print("Log 2 added.")
                     import time
-                    time.sleep(10)
+                    # time.sleep(10)
                 else:
                     st.error("Could not fetch scenario_log_id after insert.")
                 
