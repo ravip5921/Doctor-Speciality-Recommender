@@ -293,6 +293,7 @@ if st.session_state.page == "home":
     if st.session_state.user_name == "":
         st.markdown("### Please enter your name to get started:")
 
+        # 4.1) Name input
         name_col, submit_col = st.columns([3, 1], vertical_alignment="bottom")
         with name_col:
             if st.session_state["user_name"] == "":
@@ -302,43 +303,30 @@ if st.session_state.page == "home":
                 if st.session_state["user_name"].strip() == "":
                     st.warning("Please enter at least one character for your name.")
                 else:
-                    import time
-                    time.sleep(2)
                     st.success(f"Hello, {st.session_state['user_name'].strip()}!")
 
                     v1_scenario = st.session_state.selected_scenarios[1]
                     v2_scenario = st.session_state.selected_scenarios[2]
                     # insert scenario_log
-
-                    try:
-                        insert_resp = supabase.table("scenario_logs").insert({
+                    insert_resp = supabase.table("scenario_logs").insert({
                             "username": st.session_state["user_name"].strip(),
                             "scenario_v1": v1_scenario,
                             "scenario_v2": v2_scenario
                         }).execute()
-                        st.write("Scenario Log inserted.")
-                    except Exception as e:
-                        st.error(f"Insert failed: {e}")
+                    fetch_resp = (
+                    supabase.table("scenario_logs")
+                    .select("id")
+                    .eq("username", st.session_state["user_name"].strip())
+                    .order("started_at", desc=True) 
+                    .limit(1)
+                    .execute()
+                )
 
-                    
-                    try:
-                        fetch_resp = (
-                            supabase.table("scenario_logs")
-                            .select("id")
-                            .eq("username", st.session_state["user_name"].strip())
-                            .order("started_at", desc=True) 
-                            .limit(1)
-                            .execute()
-                        )
-
-
-                        st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
-                        print("Log 2 added.")
-                        import time
-                        # time.sleep(10)
-                    except:
-                        st.error("Could not fetch scenario_log_id after insert.")
-                
+                # 3. Save the ID to session state
+                if fetch_resp.data:
+                    st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
+                else:
+                    st.error("Could not fetch scenario_log_id after insert.")
                 st.rerun()
     
     if not st.session_state.scenarios_loaded:            
