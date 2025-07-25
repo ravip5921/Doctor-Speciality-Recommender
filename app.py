@@ -354,37 +354,38 @@ if st.session_state.page == "home":
         st.session_state.scenarios_loaded = True
     # Only show the welcome text & cards if we have a name
     if st.session_state["user_name"].strip() != "":
-        v1_scenario = st.session_state.selected_scenarios[1]
-        v2_scenario = st.session_state.selected_scenarios[2]
-        # insert scenario_log
-        try:
-            debug_log("Attempting Scenario insert")
-            insert_resp = supabase.table("scenario_logs").insert({
-                "username": st.session_state["user_name"].strip(),
-                "scenario_v1": v1_scenario,
-                "scenario_v2": v2_scenario
-            }).execute()
-            debug_log("Scenario Log inserted.")
-        except Exception as e:
-            debug_log(f"Insert failed: {e}")
+        if "scenario_log_id" not in st.session_state or not st.session_state["scenario_log_id"]:
+            v1_scenario = st.session_state.selected_scenarios[1]
+            v2_scenario = st.session_state.selected_scenarios[2]
+            # insert scenario_log
+            try:
+                debug_log("Attempting Scenario insert")
+                insert_resp = supabase.table("scenario_logs").insert({
+                    "username": st.session_state["user_name"].strip(),
+                    "scenario_v1": v1_scenario,
+                    "scenario_v2": v2_scenario
+                }).execute()
+                debug_log("Scenario Log inserted.")
+            except Exception as e:
+                debug_log(f"Insert failed: {e}")
 
+            
+            try:
+                fetch_resp = (
+                    supabase.table("scenario_logs")
+                    .select("id")
+                    .eq("username", st.session_state["user_name"].strip())
+                    .order("started_at", desc=True) 
+                    .limit(1)
+                    .execute()
+                )
+
+
+                st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
+                debug_log("Scenario ID stored.")
+            except:
+                debug_log("Could not fetch scenario_log_id after insert.")
         
-        try:
-            fetch_resp = (
-                supabase.table("scenario_logs")
-                .select("id")
-                .eq("username", st.session_state["user_name"].strip())
-                .order("started_at", desc=True) 
-                .limit(1)
-                .execute()
-            )
-
-
-            st.session_state["scenario_log_id"] = fetch_resp.data[0]["id"]
-            debug_log("Scenario ID stored.")
-        except:
-            debug_log("Could not fetch scenario_log_id after insert.")
-    
         st.markdown(f"#### Hi, **{st.session_state['user_name']}**! Please choose a version below:")
         st.markdown("")
 
