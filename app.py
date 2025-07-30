@@ -14,8 +14,18 @@ SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["key"]
 
 
+DEBUG = st.secrets["params"]["debug"]
+def debug_log(msg):
+    if DEBUG:
+        st.write("DEBUG: ", msg)
+
+
 COOLDOWN_TIME_LONG = 120
 COOLDOWN_TIME_SHORT = 30
+
+if DEBUG:
+    COOLDOWN_TIME_LONG = 1
+COOLDOWN_TIME_SHORT = 1
 
 # Load model and symptoms
 with open("model/disease-model.pkl", "rb") as f:
@@ -285,12 +295,6 @@ def log_message(role, text):
 
 
 
-DEBUG = st.secrets["params"]["debug"]
-def debug_log(msg):
-    if DEBUG:
-        st.write("DEBUG: ", msg)
-
-
 
 # HOME PAGE
 def render_home_page():
@@ -534,6 +538,34 @@ def countdown_with_button(message, duration_sec, button_label, button_key):
     # Show button only after countdown done
     return st.button(button_label, key=button_key)
 
+def countdown_with_form(message, duration_sec, form_key, input_key, submit_label="➤"):
+    """
+    Shows a countdown before revealing a form with text input + submit.
+    Returns the user input if submitted, else None.
+    """
+    if f"{form_key}_done" not in st.session_state:
+        st.session_state[f"{form_key}_done"] = False
+
+    if not st.session_state[f"{form_key}_done"]:
+        placeholder = st.empty()
+        for remaining in range(duration_sec, 0, -1):
+            mins, secs = divmod(remaining, 60)
+            placeholder.markdown(f"**{message} — {mins:02d}:{secs:02d}**")
+            time.sleep(1)
+        placeholder.empty()
+        st.session_state[f"{form_key}_done"] = True
+
+    # Show form after countdown done
+    if st.session_state[f"{form_key}_done"]:
+        with st.form(form_key, clear_on_submit=True):
+            cols = st.columns([4, 0.5])
+            user_input = cols[0].text_input("", key=input_key, label_visibility="collapsed")
+            send = cols[1].form_submit_button(submit_label)
+            if send and user_input:
+                return user_input
+    return None
+
+
 # VERSION 1
 def render_v1_page():
     render_back_button("v1")
@@ -607,6 +639,8 @@ def render_v2_explanation_flow(scenario):
         f"How did {patient_name} get these specific recommendations?"
     ]
 
+    if DEBUG:
+        questions = ['Hi', 'Thank you']
     if st.session_state.show_explain_option:
         # explain_container.markdown("**Do you want a more detailed explanation?**")
         if countdown_with_button("Please read the results carefully", COOLDOWN_TIME_SHORT, questions[0], "explain_btn"):
@@ -693,17 +727,19 @@ def continue_llm_chat(questions, chat_box):
             st.rerun()
 
     if idx >= len(questions):
-        with st.form("freeform_followup", clear_on_submit=True):
-            cols = st.columns([4, 0.5])
-            user_input = cols[0].text_input("", label_visibility="collapsed")
-            send = cols[1].form_submit_button("➤")
-            if send and user_input:
-                log_message("user", user_input)
-                st.session_state.chat_history.append({"role": "user", "content": user_input})
-                st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {user_input}</div>"
-                chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
-                assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
-                log_message("assistant", assistant_text)
+        user_input = countdown_with_form(
+            message="Please read carefully before interacting with the chatbot",
+            duration_sec=COOLDOWN_TIME_LONG,
+            form_key="freeform_followup",
+            input_key="freeform_input"
+        )
+        if user_input:
+            log_message("user", user_input)
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {user_input}</div>"
+            chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
+            assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
+            log_message("assistant", assistant_text)
 
 if st.session_state.page == "home":
     render_home_page()
