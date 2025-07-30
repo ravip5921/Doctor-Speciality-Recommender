@@ -25,7 +25,7 @@ COOLDOWN_TIME_SHORT = 30
 
 if DEBUG:
     COOLDOWN_TIME_LONG = 1
-COOLDOWN_TIME_SHORT = 1
+    COOLDOWN_TIME_SHORT = 1
 
 # Load model and symptoms
 with open("model/disease-model.pkl", "rb") as f:
