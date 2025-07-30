@@ -13,6 +13,10 @@ MODEL_NAME = st.secrets["api"]["model"]
 SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["key"]
 
+
+COOLDOWN_TIME_LONG = 120
+COOLDOWN_TIME_SHORT = 30
+
 # Load model and symptoms
 with open("model/disease-model.pkl", "rb") as f:
     disease_model = pickle.load(f)
@@ -247,29 +251,28 @@ def display_stalemate_text():
     After reading this, you can proceed to the quiz.
     """)
 
+    # Link to Quiz
     st.markdown("---")
 
-    # Link to Quiz
-    st.markdown(
-        """
+    reveal_button_html = """
         <a href="https://quiz-doctor-speciality-recommender.streamlit.app/" target="_blank">
-            <button style="
-                background-color:#4CAF50;
-                border:none;
-                color:white;
-                padding:10px 20px;
-                text-align:center;
-                text-decoration:none;
-                display:inline-block;
-                font-size:16px;
-                border-radius:5px;
-                cursor:pointer;">
-                Go to Quiz
-            </button>
-        </a>
-        """,
-        unsafe_allow_html=True
-    )
+                <button style="
+                    background-color:#4CAF50;
+                    border:none;
+                    color:white;
+                    padding:10px 20px;
+                    text-align:center;
+                    text-decoration:none;
+                    display:inline-block;
+                    font-size:16px;
+                    border-radius:5px;
+                    cursor:pointer;">
+                    Go to Quiz
+                </button>
+            </a>
+        """
+    countdown_component_html("Please read the given text carefully", COOLDOWN_TIME_LONG, reveal_button_html)
+
 
 
 # helper functions to log each message
@@ -397,11 +400,20 @@ def render_version_cards():
             st.rerun()
 
 # COMMON UTILITIES
+def reset_lock_timer():
+    keys_to_delete = [
+        key for key in st.session_state.keys() 
+        if key.endswith("_done") or key.endswith("_end_time") or key == "unlock_time"
+    ]
+    for key in keys_to_delete:
+        del st.session_state[key]
+
 def render_back_button(page):
     back_col, _ = st.columns([1, 4])
     with back_col:
         if st.button("← Back to Home"):
             reset_common_state()
+            reset_lock_timer()
             if page == "v2":
                 st.session_state.followup_idx = 1
             st.session_state.page = "home"
@@ -465,6 +477,62 @@ def handle_prediction(selected_symptoms):
     reset_ai_state()
     return True
 
+import time
+from datetime import datetime, timedelta
+
+def countdown_component_html(message, duration_sec, reveal_html):
+    # Initialize unlock_time only when not already set
+    if "unlock_time" not in st.session_state:
+        st.session_state.unlock_time = datetime.now() + timedelta(seconds=duration_sec)
+
+    remaining = int((st.session_state.unlock_time - datetime.now()).total_seconds())
+    
+    html_code = f"""
+    <div style="font-weight:bold;font-size:16px;">
+        <span id="timer">{message} — {remaining//60:02d}:{remaining%60:02d}</span>
+    </div>
+
+    <div id="reveal-section" style="display:none; margin-top:10px;">
+        {reveal_html}
+    </div>
+
+    <script>
+    var seconds = {remaining};
+    var timerElement = document.getElementById("timer");
+    var revealSection = document.getElementById("reveal-section");
+    var countdown = setInterval(function(){{
+        if (seconds > 0) {{
+            seconds--;
+            var mins = Math.floor(seconds/60);
+            var secs = seconds % 60;
+            timerElement.innerHTML = "{message} — " + 
+                (mins<10?"0":"") + mins + ":" + (secs<10?"0":"") + secs;
+        }} else {{
+            clearInterval(countdown);
+            timerElement.innerHTML = "You can now proceed!";
+            revealSection.style.display = "block";
+        }}
+    }}, 1000);
+    </script>
+    """
+
+    st.components.v1.html(html_code, height=120)
+def countdown_with_button(message, duration_sec, button_label, button_key):
+    # Initialize countdown state
+    if f"{button_key}_done" not in st.session_state:
+        st.session_state[f"{button_key}_done"] = False
+
+    if not st.session_state[f"{button_key}_done"]:
+        placeholder = st.empty()
+        for remaining in range(duration_sec, 0, -1):
+            mins, secs = divmod(remaining, 60)
+            placeholder.markdown(f"**{message} — {mins:02d}:{secs:02d}**")
+            time.sleep(1)
+        placeholder.empty()
+        st.session_state[f"{button_key}_done"] = True
+
+    # Show button only after countdown done
+    return st.button(button_label, key=button_key)
 
 # VERSION 1
 def render_v1_page():
@@ -478,6 +546,7 @@ def render_v1_page():
 
     if st.button("Predict"):
         if handle_prediction(selected_symptoms):
+            reset_lock_timer()
             st.rerun()
 
     if st.session_state.prediction_ready:
@@ -503,6 +572,7 @@ def render_v2_page():
     if st.button("Predict"):
         if handle_prediction(selected_symptoms):
             st.session_state.followup_idx = 1
+            reset_lock_timer()
             st.rerun()
 
     if st.session_state.prediction_ready:
@@ -538,8 +608,8 @@ def render_v2_explanation_flow(scenario):
     ]
 
     if st.session_state.show_explain_option:
-        explain_container.markdown("**Do you want a more detailed explanation?**")
-        if explain_container.button(questions[0]):
+        # explain_container.markdown("**Do you want a more detailed explanation?**")
+        if countdown_with_button("Please read the results carefully", COOLDOWN_TIME_SHORT, questions[0], "explain_btn"):
             st.session_state.show_explain_option = False
             st.session_state.explain_clicked = True
             explain_container.empty()
@@ -613,12 +683,14 @@ def continue_llm_chat(questions, chat_box):
         st.session_state.followup_idx += 1
 
     if idx < len(questions):
-        st.button(
-            questions[idx],
-            key=f"followup_btn_{idx}",
-            on_click=ask_and_advance,
-            args=(idx,)
-        )
+        if countdown_with_button(
+            message="Please read the generated text carefully",
+            duration_sec=COOLDOWN_TIME_SHORT,
+            button_label=questions[idx],
+            button_key=f"followup_btn_{idx}"
+        ):
+            ask_and_advance(idx)
+            st.rerun()
 
     if idx >= len(questions):
         with st.form("freeform_followup", clear_on_submit=True):
