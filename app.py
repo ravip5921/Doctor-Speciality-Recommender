@@ -20,8 +20,8 @@ def debug_log(msg):
         st.write("DEBUG: ", msg)
 
 
-COOLDOWN_TIME_LONG = 120
-COOLDOWN_TIME_SHORT = 30
+COOLDOWN_TIME_LONG = 45
+COOLDOWN_TIME_SHORT = 45
 
 if DEBUG:
     COOLDOWN_TIME_LONG = 1
