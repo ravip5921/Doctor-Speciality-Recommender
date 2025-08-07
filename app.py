@@ -451,6 +451,12 @@ def render_scenario(version):
 def render_symptom_selector():
     return st.multiselect("Select symptoms:", options=symptoms)
 
+def render_spacer():
+    st.markdown("""
+    <div style='min-height: 250px; overflow-y: auto; padding: 10px;'>
+                <h1></h1>
+    </div>
+    """, unsafe_allow_html=True)
 
 def handle_prediction(selected_symptoms):
     if len(selected_symptoms) < 1:
@@ -580,7 +586,9 @@ def render_v1_page():
         if handle_prediction(selected_symptoms):
             reset_lock_timer()
             st.rerun()
-
+    if not st.session_state.prediction_ready:
+        render_spacer()
+    
     if st.session_state.prediction_ready:
         display_results(
             st.session_state.selected_symptoms_clean,
@@ -600,12 +608,15 @@ def render_v2_page():
 
     scenario = render_scenario(2)
     selected_symptoms = render_symptom_selector()
+    
 
     if st.button("Predict"):
         if handle_prediction(selected_symptoms):
             st.session_state.followup_idx = 1
             reset_lock_timer()
             st.rerun()
+    if not st.session_state.prediction_ready:
+        render_spacer()
 
     if st.session_state.prediction_ready:
         render_v2_prediction_results()
