@@ -151,6 +151,7 @@ def make_system_prompt(symptoms, top_classes, top_probs, specialist, specialist_
                 • Mention which symptoms most influenced each disease prediction.
                 • Briefly describe how a few example trees voted (e.g., “Tree #1 checked X → Y → Z and voted for A”). Use concrete example trees and symptoms to illustrate the decision process, ensuring intuitive understanding.
                 • Explain how the diseases led to the recommended specialists.
+            - When asked **what-if scenarios** or asked for result explanations: (like: *"What if I had [different symptom]?"*, *Can you explain the results?*):
                 • Provide at least two plausible “what-if” scenarios showing how changing symptoms might alter predictions.
                 • Clarify what the percentages mean and why lower probabilities can still be important.
             - When explicitly asked, you may also provide full mathematical details.
