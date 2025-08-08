@@ -20,7 +20,7 @@ def debug_log(msg):
         st.write("DEBUG: ", msg)
 
 
-COOLDOWN_TIME_LONG = 45
+COOLDOWN_TIME_LONG = 30
 COOLDOWN_TIME_SHORT = 15
 NO_COOLDOWN = 0
 
@@ -455,6 +455,7 @@ def reset_prequiz_states():
         "v2_input_used",
         "v2_quiz_questions"
     ]
+    keys_to_clear += ["final_chat_history", "final_streaming", "v2_show_final_chat"]
 
     # Also remove any selected option keys per question
     for key in list(st.session_state.keys()):
@@ -624,7 +625,8 @@ def stream_llm_api(history):
                         print("⚠️ Chunk parsing error:", parse_err)
                         continue
     except requests.RequestException as e:
-        raise RuntimeError(f"LLM stream failed: {e}")
+        st.markdown("LLM stream error: {e}")
+        # raise RuntimeError(f"LLM stream failed: {e}")
 
 
 def stream_to_llm_chat(history, container):
@@ -676,6 +678,8 @@ def render_v2_page():
     if st.button("Predict"):
         if handle_prediction(selected_symptoms):
             reset_lock_timer()
+            reset_prequiz_states()
+
             st.session_state.v2_quiz_index = 0
             st.session_state.v2_selected_options = []
             st.session_state.v2_quiz_done = False
@@ -701,9 +705,9 @@ def render_v2_page():
         questions = load_prequiz_questions(scenario)
         idx = st.session_state.get("v2_quiz_index", 0)
         total = len(questions)
-
-        for i in range(idx + 1):
-            render_v2_quiz_flow(questions, i, scenario)
+        if idx < total:
+            for i in range(idx + 1):
+                render_v2_quiz_flow(questions, i, scenario)
 
 def make_quiz_system_prompt(question, options, correct_index, selected_symptoms, top_classes, top_probs, specialists, specialist_probs, scenario):
     prompt = f"""
@@ -731,7 +735,7 @@ def make_quiz_system_prompt(question, options, correct_index, selected_symptoms,
 def render_v2_quiz_flow(questions, idx, scenario):
     question = questions[idx]
     qid = question['id']
-    st.markdown(f"### 🧠 Q{idx+1}: {question['prompt']}")
+    st.markdown(f"#### Q{idx+1}: {question['prompt']}")
 
     options = [question['opt1'], question['opt2'], question['opt3'], question['opt4']]
 
@@ -762,6 +766,7 @@ def render_v2_quiz_flow(questions, idx, scenario):
         else:
             st.error(f"❌ Incorrect.")
 
+    # Initialize quiz session state dicts if needed
     if "v2_chat_history_per_q" not in st.session_state:
         st.session_state.v2_chat_history_per_q = {}
     if "v2_sent_system_prompt" not in st.session_state:
@@ -787,24 +792,21 @@ def render_v2_quiz_flow(questions, idx, scenario):
         chat_history.append({"role": "system", "content": system_prompt})
         st.session_state.v2_sent_system_prompt[qid] = True
 
-    # render all messages (excluding system prompt)
+    # Render all messages excluding system
     for msg in chat_history:
         if msg["role"] != "system":
             with st.chat_message(msg['role']):
                 st.markdown(msg['content'])
 
-    if idx == st.session_state.v2_quiz_index:
-        user_input = countdown_with_form(
-            message="Read the text carefully and answer the question",
-            duration_sec=NO_COOLDOWN,
-            form_key=f"form_q_{qid}",
-            input_key=f"input_q_{qid}"
-        )
+    # --- Add streaming flag init per question ---
+    streaming_flag_key = f"v2_is_streaming_{qid}"
+    if streaming_flag_key not in st.session_state:
+        st.session_state[streaming_flag_key] = False
 
-        if user_input:
-            chat_history.append({"role": "user", "content": user_input})
-            with st.chat_message("user"):
-                st.markdown(user_input)
+    # Only render form and collect input if this is the active quiz question AND not currently streaming
+    if idx == st.session_state.v2_quiz_index:
+        if st.session_state[streaming_flag_key]:
+            # Stream assistant response (no form)
             try:
                 with st.chat_message("assistant"):
                     response_container = st.empty()
@@ -814,23 +816,117 @@ def render_v2_quiz_flow(questions, idx, scenario):
                         response_container.markdown(assistant_text + "▌")
                     response_container.markdown(assistant_text)
                     chat_history.append({"role": "assistant", "content": assistant_text})
-                    log_message("user", user_input)
                     log_message("assistant", assistant_text)
+                st.session_state[streaming_flag_key] = False  # done streaming
+                st.rerun()  # rerun so form can show next run
             except Exception as e:
                 with st.chat_message("assistant"):
                     st.error(f"LLM error: {e}")
+                st.session_state[streaming_flag_key] = False
+        else:
+            if st.session_state.get("v2_show_final_chat", False):
+                # If final chat is showing, skip rendering per-question input form
+                pass
+            else:
+                # Not streaming → show form to collect user input
+                user_input = countdown_with_form(
+                    message="Read the text carefully and answer the question",
+                    duration_sec=NO_COOLDOWN,
+                    form_key=f"form_q_{qid}",
+                    input_key=f"input_q_{qid}"
+                )
+
+                if user_input:
+                    chat_history.append({"role": "user", "content": user_input})
+                    with st.chat_message("user"):
+                        st.markdown(user_input)
+                    # Set streaming flag to true to trigger streaming on next rerun
+                    st.session_state[streaming_flag_key] = True
+                    st.rerun()
+
+        # Show Next / Finish button logic
+        if st.session_state.v2_quiz_index < len(questions) - 1:
+            # For all but last question, show normal Next button
+            if st.button("Next", key=f"next_btn_{idx}"):
+                st.session_state.v2_selected_options.append({
+                    "question_id": question['id'],
+                    "selected": chosen,
+                    "correct": correct
+                })
+                st.session_state.v2_quiz_index += 1
+                st.rerun()
+
+        else:
+            # Last question: control when to show final chatbot form with a flag
+            if not st.session_state.get("v2_show_final_chat", False):
+                # Show a "Finish Quiz" button first
+                if st.button("Finish Quiz", key=f"finish_btn_{idx}"):
+                    # Save last question answer before finishing
+                    st.session_state.v2_selected_options.append({
+                        "question_id": question['id'],
+                        "selected": chosen,
+                        "correct": correct
+                    })
+                    st.session_state.v2_show_final_chat = True
+                    st.rerun()
+
+            else:
+                # Show final chatbot input after "Finish Quiz" pressed
+                st.markdown("---")
+                st.markdown("#### 📝 Do you have any other questions?")
+                system_prompt = make_system_prompt(
+                    st.session_state.selected_symptoms_clean,
+                    st.session_state.top_classes,
+                    st.session_state.top_probs,
+                    st.session_state.specialists,
+                    [round(x * 100, 2) for x in st.session_state.specialists_pb],
+                    scenario
+                )
+                if "final_chat_history" not in st.session_state:
+                    st.session_state.final_chat_history = [
+                        {"role": "system", "content": system_prompt}
+                    ]
+                if "final_streaming" not in st.session_state:
+                    st.session_state.final_streaming = False
+
+                # Render final chat transcript so far
+                for msg in st.session_state.final_chat_history:
+                    if msg["role"] == "system":
+                        continue
+                    with st.chat_message(msg["role"]):
+                        st.markdown(msg["content"])
+
+                # Stream assistant if streaming flag set
+                if st.session_state.final_streaming:
+                    with st.chat_message("assistant"):
+                        response_container = st.empty()
+                        assistant_text = ""
+                        for chunk in stream_llm_api(st.session_state.final_chat_history):
+                            assistant_text += chunk
+                            response_container.markdown(assistant_text + "▌")
+                        response_container.markdown(assistant_text)
+
+                    st.session_state.final_streaming = False
+                    st.session_state.final_chat_history.append({"role": "assistant", "content": assistant_text})
+                    st.rerun()
+
+                else:
+                    # Show freeform input form
+                    user_input = countdown_with_form(
+                        message="Any final thoughts or questions?",
+                        duration_sec=NO_COOLDOWN,
+                        form_key="final_freeform_form",
+                        input_key="final_freeform_input"
+                    )
+
+                    if user_input:
+                        st.session_state.final_chat_history.append({"role": "user", "content": user_input})
+                        with st.chat_message("user"):
+                            st.markdown(user_input)
+                        st.session_state.final_streaming = True
+                        st.rerun()
 
     st.session_state.v2_chat_history_per_q[qid] = chat_history
-
-    if idx == st.session_state.v2_quiz_index:
-        if st.button("Next", key=f"next_btn_{idx}"):
-            st.session_state.v2_selected_options.append({
-                "question_id": question['id'],
-                "selected": chosen,
-                "correct": correct
-            })
-            st.session_state.v2_quiz_index += 1
-            st.rerun()
 
 def load_prequiz_questions(scenario):
     if "v2_quiz_questions" not in st.session_state:
