@@ -21,7 +21,8 @@ def debug_log(msg):
 
 
 COOLDOWN_TIME_LONG = 45
-COOLDOWN_TIME_SHORT = 45
+COOLDOWN_TIME_SHORT = 15
+NO_COOLDOWN = 0
 
 if DEBUG:
     COOLDOWN_TIME_LONG = 1
@@ -346,15 +347,15 @@ def load_scenarios_if_needed():
 def ensure_scenario_log():
     """Ensures a scenario log exists for the current user in DB."""
     if "scenario_log_id" not in st.session_state or not st.session_state["scenario_log_id"]:
-        v1_scenario = st.session_state.selected_scenarios[1]
-        v2_scenario = st.session_state.selected_scenarios[2]
+        v2_scenario = st.session_state.selected_scenarios[1]
+        v1_scenario = st.session_state.selected_scenarios[2]
         
         try:
             debug_log("Attempting Scenario insert")
             supabase.table("scenario_logs").insert({
                 "username": st.session_state["user_name"].strip(),
-                "scenario_v1": v1_scenario,
-                "scenario_v2": v2_scenario
+                "scenario_v2": v2_scenario,
+                "scenario_v1": v1_scenario
             }).execute()
             debug_log("Scenario Log inserted.")
         except Exception as e:
@@ -374,8 +375,8 @@ def ensure_scenario_log():
         except Exception as e:
             debug_log(f"Could not fetch scenario_log_id: {e}")
 
-def reset_v2_state():
-    """Resets all v2-specific states."""
+def reset_v1_state():
+    """Resets all v1-specific states."""
     st.session_state.prediction_ready = False
     st.session_state.initial_prompt_sent = False
     st.session_state.chat_history = []
@@ -390,19 +391,21 @@ def render_version_cards():
     c1, c2 = st.columns(2, gap="large")
 
     with c1:
-        st.info("""**Version 1**: Prediction Model.
-                \nGet diseases predictions & specialists recommendations.\n\nThe algorithms used in the system are explained briefly along with some key terms that you should familiarize yourself with.""")
+        st.info("""**Version 1**: Prediction Model and AI Response.
+                \nGet diseases predictions & specialists recommendations, along with AI-generated explanations.\n\n You can ask the AI-chatbot some pre-selected and any questions you want.""")
         if st.button("Go to Version 1"):
             st.session_state.page = "v1"
+            reset_v1_state()
             st.rerun()
 
     with c2:
-        st.info("""**Version 2**: Prediction Model and AI Response.
-                \nGet diseases predictions & specialists recommendations, along with AI-generated explanations.\n\n You can ask the AI-chatbot some pre-selected and any questions you want.""")
+        st.info("""**Version 1**: Prediction Model with PreQuiz.
+                \nGet diseases predictions & specialists recommendations, along with AI-generated explanation and a pre quiz.\n\nThe pre-quiz will familiarize you with the system.""")
         if st.button("Go to Version 2"):
             st.session_state.page = "v2"
-            reset_v2_state()
             st.rerun()
+
+    
 
 # COMMON UTILITIES
 def reset_lock_timer():
@@ -420,7 +423,7 @@ def render_back_button(page):
             reset_common_state()
             reset_lock_timer()
             reset_prequiz_states()
-            if page == "v2":
+            if page == "v1":
                 st.session_state.followup_idx = 1
             st.session_state.page = "home"
             st.rerun()
@@ -443,14 +446,14 @@ def reset_ai_state():
 
 def reset_prequiz_states():
     keys_to_clear = [
-        "v1_quiz_index",
-        "v1_selected_options",
-        "v1_quiz_done",
-        "v1_chat_history_per_q",
-        "v1_sent_system_prompt",
-        "v1_initial_radio_set",
-        "v1_input_used",
-        "v1_quiz_questions"
+        "v2_quiz_index",
+        "v2_selected_options",
+        "v2_quiz_done",
+        "v2_chat_history_per_q",
+        "v2_sent_system_prompt",
+        "v2_initial_radio_set",
+        "v2_input_used",
+        "v2_quiz_questions"
     ]
 
     # Also remove any selected option keys per question
@@ -548,7 +551,7 @@ def countdown_component_html(message, duration_sec, reveal_html):
     </script>
     """
 
-    st.components.v1.html(html_code, height=120)
+    st.components.v2.html(html_code, height=120)
 def countdown_with_button(message, duration_sec, button_label, button_key):
     # Initialize countdown state
     if f"{button_key}_done" not in st.session_state:
@@ -624,9 +627,45 @@ def stream_llm_api(history):
         raise RuntimeError(f"LLM stream failed: {e}")
 
 
+def stream_to_llm_chat(history, container):
+    """
+    Wrapper for stream_llm_api that mimics the interface of stream_to_llm.
+    Sends user+system history to LLM and streams response into the container.
+    """
+    assistant_plain = ""
+    try:
+        current = "<div class='assistant-msg'><b>🤖</b> "
+        for chunk in stream_llm_api(history):
+            assistant_plain += chunk
+            current += chunk
 
-def render_v1_page():
-    render_back_button("v1")
+            html_code = f"""<div id="chat" class='scrollbox'>{st.session_state.chat_html + current}</div>
+                            <script>
+                                var chat = document.getElementById("chat");
+                                chat.scrollTop = chat.scrollHeight;
+                            </script>"""
+            container.markdown(html_code, unsafe_allow_html=True)
+
+        current += "</div>"
+        rawChat = current.replace("<div class='assistant-msg'><b>🤖</b> ", "").replace("</div>", "")
+        st.session_state.chat_html += current
+        st.session_state.chat_history.append({"role": "assistant", "content": rawChat})
+        return assistant_plain
+
+    except Exception as e:
+        err = f"<div class='assistant-msg'><b>🤖</b> Error: {e}</div>"
+        st.session_state.chat_html += err
+        html_code = f"""<div id="chat" class='scrollbox'>{st.session_state.chat_html}</div>
+                        <script>
+                            var chat = document.getElementById("chat");
+                            chat.scrollTop = chat.scrollHeight;
+                        </script>"""
+        container.markdown(html_code, unsafe_allow_html=True)
+        return False
+
+
+def render_v2_page():
+    render_back_button("v2")
     st.title("Doctor Specialist Recommender")
     st.subheader("Version 1 - Pre-Quiz Explanation Flow")
     st.divider()
@@ -637,13 +676,13 @@ def render_v1_page():
     if st.button("Predict"):
         if handle_prediction(selected_symptoms):
             reset_lock_timer()
-            st.session_state.v1_quiz_index = 0
-            st.session_state.v1_selected_options = []
-            st.session_state.v1_quiz_done = False
-            st.session_state.v1_chat_history_per_q = {}
-            st.session_state.v1_sent_system_prompt = {}
-            st.session_state.v1_initial_radio_set = {}
-            st.session_state.v1_input_used = {}
+            st.session_state.v2_quiz_index = 0
+            st.session_state.v2_selected_options = []
+            st.session_state.v2_quiz_done = False
+            st.session_state.v2_chat_history_per_q = {}
+            st.session_state.v2_sent_system_prompt = {}
+            st.session_state.v2_initial_radio_set = {}
+            st.session_state.v2_input_used = {}
             st.rerun()
 
     if not st.session_state.prediction_ready:
@@ -660,11 +699,11 @@ def render_v1_page():
         )
 
         questions = load_prequiz_questions(scenario)
-        idx = st.session_state.get("v1_quiz_index", 0)
+        idx = st.session_state.get("v2_quiz_index", 0)
         total = len(questions)
 
         for i in range(idx + 1):
-            render_v1_quiz_flow(questions, i, scenario)
+            render_v2_quiz_flow(questions, i, scenario)
 
 def make_quiz_system_prompt(question, options, correct_index, selected_symptoms, top_classes, top_probs, specialists, specialist_probs, scenario):
     prompt = f"""
@@ -689,7 +728,7 @@ def make_quiz_system_prompt(question, options, correct_index, selected_symptoms,
         """
     return prompt.strip()
 
-def render_v1_quiz_flow(questions, idx, scenario):
+def render_v2_quiz_flow(questions, idx, scenario):
     question = questions[idx]
     qid = question['id']
     st.markdown(f"### 🧠 Q{idx+1}: {question['prompt']}")
@@ -723,19 +762,19 @@ def render_v1_quiz_flow(questions, idx, scenario):
         else:
             st.error(f"❌ Incorrect.")
 
-    if "v1_chat_history_per_q" not in st.session_state:
-        st.session_state.v1_chat_history_per_q = {}
-    if "v1_sent_system_prompt" not in st.session_state:
-        st.session_state.v1_sent_system_prompt = {}
-    if "v1_input_used" not in st.session_state:
-        st.session_state.v1_input_used = {}
+    if "v2_chat_history_per_q" not in st.session_state:
+        st.session_state.v2_chat_history_per_q = {}
+    if "v2_sent_system_prompt" not in st.session_state:
+        st.session_state.v2_sent_system_prompt = {}
+    if "v2_input_used" not in st.session_state:
+        st.session_state.v2_input_used = {}
 
-    if qid not in st.session_state.v1_chat_history_per_q:
-        st.session_state.v1_chat_history_per_q[qid] = []
+    if qid not in st.session_state.v2_chat_history_per_q:
+        st.session_state.v2_chat_history_per_q[qid] = []
 
-    chat_history = st.session_state.v1_chat_history_per_q[qid]
+    chat_history = st.session_state.v2_chat_history_per_q[qid]
 
-    if qid not in st.session_state.v1_sent_system_prompt:
+    if qid not in st.session_state.v2_sent_system_prompt:
         system_prompt = make_quiz_system_prompt(
             question['prompt'], options, correct,
             st.session_state.selected_symptoms_clean,
@@ -746,7 +785,7 @@ def render_v1_quiz_flow(questions, idx, scenario):
             scenario
         )
         chat_history.append({"role": "system", "content": system_prompt})
-        st.session_state.v1_sent_system_prompt[qid] = True
+        st.session_state.v2_sent_system_prompt[qid] = True
 
     # render all messages (excluding system prompt)
     for msg in chat_history:
@@ -754,10 +793,10 @@ def render_v1_quiz_flow(questions, idx, scenario):
             with st.chat_message(msg['role']):
                 st.markdown(msg['content'])
 
-    if idx == st.session_state.v1_quiz_index:
+    if idx == st.session_state.v2_quiz_index:
         user_input = countdown_with_form(
-            message="Ask your questions about this question before locking your answer",
-            duration_sec=COOLDOWN_TIME_SHORT,
+            message="Read the text carefully and answer the question",
+            duration_sec=NO_COOLDOWN,
             form_key=f"form_q_{qid}",
             input_key=f"input_q_{qid}"
         )
@@ -781,35 +820,36 @@ def render_v1_quiz_flow(questions, idx, scenario):
                 with st.chat_message("assistant"):
                     st.error(f"LLM error: {e}")
 
-    st.session_state.v1_chat_history_per_q[qid] = chat_history
+    st.session_state.v2_chat_history_per_q[qid] = chat_history
 
-    if idx == st.session_state.v1_quiz_index:
+    if idx == st.session_state.v2_quiz_index:
         if st.button("Next", key=f"next_btn_{idx}"):
-            st.session_state.v1_selected_options.append({
+            st.session_state.v2_selected_options.append({
                 "question_id": question['id'],
                 "selected": chosen,
                 "correct": correct
             })
-            st.session_state.v1_quiz_index += 1
+            st.session_state.v2_quiz_index += 1
             st.rerun()
 
 def load_prequiz_questions(scenario):
-    if "v1_quiz_questions" not in st.session_state:
+    if "v2_quiz_questions" not in st.session_state:
         patient_name = ("").join(scenario.split(" ")[:2])
         resp = supabase.table("prequiz_questions") \
             .select("id, prompt, opt1, opt2, opt3, opt4, correct_index") \
             .eq("patient_name", patient_name) \
-            .limit(5) \
+            .order("id", desc=False) \
+            .limit(3) \
             .execute()
-        st.session_state.v1_quiz_questions = resp.data
+        st.session_state.v2_quiz_questions = resp.data
 
-    return st.session_state.v1_quiz_questions
+    return st.session_state.v2_quiz_questions
 
-# VERSION 2
-def render_v2_page():
-    render_back_button("v2")
+# VERSION 1
+def render_v1_page():
+    render_back_button("v1")
     st.title("Doctor Specialist Recommender")
-    st.subheader("Version 2 - Prediction Model with AI Chatbot")
+    st.subheader("Version 1 - Prediction Model with AI Chatbot")
     st.divider()
 
     scenario = render_scenario(2)
@@ -825,10 +865,10 @@ def render_v2_page():
         render_spacer()
 
     if st.session_state.prediction_ready:
-        render_v2_prediction_results()
-        render_v2_explanation_flow(scenario)
+        render_v1_prediction_results()
+        render_v1_explanation_flow(scenario)
 
-def render_v2_prediction_results():
+def render_v1_prediction_results():
     selected_symptoms_clean = st.session_state.selected_symptoms_clean
     top_classes = st.session_state.top_classes
     top_probs = st.session_state.top_probs
@@ -847,7 +887,7 @@ def render_v2_prediction_results():
     st.markdown("---")
 
 
-def render_v2_explanation_flow(scenario):
+def render_v1_explanation_flow(scenario):
     explain_container = st.empty()
     patient_name = scenario.split(" ")[0] if scenario.split(" ") else "the patient"
 
@@ -856,8 +896,8 @@ def render_v2_explanation_flow(scenario):
         f"How did {patient_name} get these specific recommendations?"
     ]
 
-    # if DEBUG:
-    #     questions = ['Hi', 'Thank you']
+    if DEBUG:
+        questions = ['Hi', 'Thank you']
     if st.session_state.show_explain_option:
         # explain_container.markdown("**Do you want a more detailed explanation?**")
         if countdown_with_button("Please read the results carefully", COOLDOWN_TIME_SHORT, questions[0], "explain_btn"):
@@ -936,7 +976,7 @@ def continue_llm_chat(questions, chat_box):
     if idx < len(questions):
         if countdown_with_button(
             message="Please read the generated text carefully",
-            duration_sec=COOLDOWN_TIME_SHORT,
+            duration_sec=COOLDOWN_TIME_LONG,
             button_label=questions[idx],
             button_key=f"followup_btn_{idx}"
         ):
@@ -961,8 +1001,8 @@ def continue_llm_chat(questions, chat_box):
 if st.session_state.page == "home":
     render_home_page()
 
-elif st.session_state.page == "v1":
-    render_v1_page()
-
 elif st.session_state.page == "v2":
     render_v2_page()
+
+elif st.session_state.page == "v1":
+    render_v1_page()

@@ -1,0 +1,130 @@
+{
+  "MichaelBrown": [
+    {
+      "question": "How does the disease prediction model identify conditions like Chicken Pox from symptoms like 'red spots over body'?",
+      "options": [
+        "It aggregates votes from decision trees trained on past symptom-disease patterns.",
+        "It matches symptoms directly to a fixed disease dictionary.",
+        "It prioritizes the first matching disease alphabetically.",
+        "It randomly selects a disease among matching symptoms."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "Why might Michael's symptoms lead the model to favor Chicken Pox over Hepatitis C?",
+      "options": [
+        "Because Chicken Pox symptoms like red spots and skin rash are more distinctively matched by decision trees.",
+        "Because Hepatitis C has fewer symptoms in the training data.",
+        "Because skin-related symptoms always override internal disease predictions.",
+        "Because Hepatitis C has been deprioritized in this version of the model."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "If Michael had reported no rash but more fatigue and jaundice, what would the model likely do?",
+      "options": [
+        "Shift probability toward liver-related conditions like Hepatitis C.",
+        "Still predict Chicken Pox due to symptom memory.",
+        "Increase confidence in Acne.",
+        "Predict a neurological issue due to fatigue."
+      ],
+      "answer": "1"
+    }
+  ],
+  "JaneSmith": [
+    {
+      "question": "How does the specialist model decide who Jane should see based on predicted diseases?",
+      "options": [
+        "It uses weighted probabilities from disease predictions to rank relevant specialists.",
+        "It assigns a specialist at random based on current symptoms.",
+        "It only considers the top disease and maps a specialist accordingly.",
+        "It uses alphabetical matching between disease and specialist names."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "Why might Jane be recommended a gastroenterologist rather than a general physician?",
+      "options": [
+        "Because her symptoms point to digestive tract involvement, which the model detects.",
+        "Because general physicians are deprioritized for vomiting cases.",
+        "Because she had previously seen a gastroenterologist.",
+        "Because abdominal pain always routes to that specialist."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "If Jane also reported a sore throat and no vomiting, how would the model's recommendations likely change?",
+      "options": [
+        "It might shift toward an ENT specialist or general physician.",
+        "It would increase the score for gastroenterologists.",
+        "It would prioritize neurologists.",
+        "It would make no change."
+      ],
+      "answer": "1"
+    }
+  ],
+  "AliceJohnson": [
+    {
+      "question": "How does the system interpret overlapping neurological symptoms like dizziness and slurred speech?",
+      "options": [
+        "It treats such patterns as indicative of central nervous system issues in the decision trees.",
+        "It flags them for manual review.",
+        "It ignores combinations of symptoms and treats them independently.",
+        "It assigns random weights to each neurological symptom."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "Why might the model prioritize neurological conditions for Alice over infections or cardiac problems?",
+      "options": [
+        "Because the combination of symptoms (visual issues, headache, speech slurring) is more strongly linked to neurological issues in its training data.",
+        "Because visual symptoms automatically imply a brain issue.",
+        "Because infections were not included in the model for her age group.",
+        "Because Alice selected 'neurology' herself."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "If Alice also had numbness in her arm and facial droop, how would the system likely respond?",
+      "options": [
+        "It would increase the likelihood of recommending a neurologist and flag stroke-related conditions.",
+        "It would downgrade visual disturbances.",
+        "It would switch focus to ENT problems.",
+        "It would recommend dermatology."
+      ],
+      "answer": "1"
+    }
+  ],
+  "EmilyDavis": [
+    {
+      "question": "What does the model use to recommend specialists after predicting diseases from Emily's symptoms?",
+      "options": [
+        "It applies a logistic regression model using disease probabilities to rank specialists.",
+        "It flips a coin if multiple diseases are detected.",
+        "It checks which diseases are more serious and recommends based on severity.",
+        "It uses a lookup table based on disease names."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "Why is internal medicine recommended for Emily over cardiology or allergy?",
+      "options": [
+        "Because malaria is most likely and falls under internal medicine based on training data patterns.",
+        "Because cardiologists aren't in the model.",
+        "Because internal medicine is always the default recommendation.",
+        "Because fever always routes to internal medicine."
+      ],
+      "answer": "1"
+    },
+    {
+      "question": "If Emily's fever dropped but she developed an itchy rash, what would the model likely do?",
+      "options": [
+        "Shift toward allergy-related predictions and increase allergist recommendation score.",
+        "Still prioritize malaria.",
+        "Switch to dermatology as default.",
+        "Ignore changes unless more symptoms are added."
+      ],
+      "answer": "1"
+    }
+  ]
+}

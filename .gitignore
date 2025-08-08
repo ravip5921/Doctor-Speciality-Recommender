@@ -1,3 +1,4 @@
 .streamlit/secrets.toml
 helpers/*
 transcripts/*
+.env
