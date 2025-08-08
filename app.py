@@ -211,7 +211,7 @@ def stream_to_llm(history, container):
         container.markdown(html_code,unsafe_allow_html=True)
         return False
 
-def display_results(selected_symptoms_clean, top_classes, top_probs, specialists, specialists_pb):
+def display_results(selected_symptoms_clean, top_classes, top_probs, specialists, specialists_pb, showStalemate=True):
     
     specialist_prob = [round(x * 100, 2) for x in specialists_pb]
 
@@ -225,8 +225,9 @@ def display_results(selected_symptoms_clean, top_classes, top_probs, specialists
 
     st.info(f"For theses diseases, our **Specialist Recommendation** model suggests: \n\n- **{specialists[0]}** ({specialist_prob[0]} % confidence)\n- **{specialists[1]}** ({specialist_prob[1]} % confidence)")
 
-    # Call second function for details
-    display_stalemate_text()
+    if showStalemate:
+        # Call second function for details
+        display_stalemate_text()
 
 def display_stalemate_text():
     st.markdown("---")
@@ -418,6 +419,7 @@ def render_back_button(page):
         if st.button("← Back to Home"):
             reset_common_state()
             reset_lock_timer()
+            reset_prequiz_states()
             if page == "v2":
                 st.session_state.followup_idx = 1
             st.session_state.page = "home"
@@ -438,6 +440,26 @@ def reset_ai_state():
     st.session_state.chat_history = []
     st.session_state.chat_html = ""
     st.session_state.explain_clicked = False
+
+def reset_prequiz_states():
+    keys_to_clear = [
+        "v1_quiz_index",
+        "v1_selected_options",
+        "v1_quiz_done",
+        "v1_chat_history_per_q",
+        "v1_sent_system_prompt",
+        "v1_initial_radio_set",
+        "v1_input_used",
+        "v1_quiz_questions"
+    ]
+
+    # Also remove any selected option keys per question
+    for key in list(st.session_state.keys()):
+        if key.startswith("selected_option_q_") or key.startswith("option_radio_q_") or key.startswith("form_q_") or key.startswith("input_q_"):
+            keys_to_clear.append(key)
+
+    for key in keys_to_clear:
+        st.session_state.pop(key, None)
 
 
 def render_scenario(version):
@@ -570,34 +592,218 @@ def countdown_with_form(message, duration_sec, form_key, input_key, submit_label
             if send and user_input:
                 return user_input
     return None
-
-
 # VERSION 1
+def stream_llm_api(history):
+    """
+    Streams assistant response from LLM API, chunk by chunk.
+    Yields text in real time for display in st.chat_message container.
+    """
+    payload = {
+        "model": MODEL_NAME,
+        "messages": history,
+        "stream": True
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    try:
+        with requests.post(API_URL, headers=headers, json=payload, stream=True, timeout=60) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines(decode_unicode=True):
+                if line:
+                    try:
+                        obj = json.loads(line)
+                        chunk = obj.get("message", {}).get("content", "")
+                        if chunk:
+                            yield chunk
+                    except Exception as parse_err:
+                        print("⚠️ Chunk parsing error:", parse_err)
+                        continue
+    except requests.RequestException as e:
+        raise RuntimeError(f"LLM stream failed: {e}")
+
+
+
 def render_v1_page():
     render_back_button("v1")
     st.title("Doctor Specialist Recommender")
-    st.subheader("Version 1 - Prediction Model")
+    st.subheader("Version 1 - Pre-Quiz Explanation Flow")
     st.divider()
 
-    render_scenario(0)
+    scenario = render_scenario(0)
     selected_symptoms = render_symptom_selector()
 
     if st.button("Predict"):
         if handle_prediction(selected_symptoms):
             reset_lock_timer()
+            st.session_state.v1_quiz_index = 0
+            st.session_state.v1_selected_options = []
+            st.session_state.v1_quiz_done = False
+            st.session_state.v1_chat_history_per_q = {}
+            st.session_state.v1_sent_system_prompt = {}
+            st.session_state.v1_initial_radio_set = {}
+            st.session_state.v1_input_used = {}
             st.rerun()
+
     if not st.session_state.prediction_ready:
         render_spacer()
-    
+
     if st.session_state.prediction_ready:
         display_results(
             st.session_state.selected_symptoms_clean,
             st.session_state.top_classes,
             st.session_state.top_probs,
             st.session_state.specialists,
-            st.session_state.specialists_pb
+            st.session_state.specialists_pb,
+            showStalemate=False
         )
 
+        questions = load_prequiz_questions(scenario)
+        idx = st.session_state.get("v1_quiz_index", 0)
+        total = len(questions)
+
+        for i in range(idx + 1):
+            render_v1_quiz_flow(questions, i, scenario)
+
+def make_quiz_system_prompt(question, options, correct_index, selected_symptoms, top_classes, top_probs, specialists, specialist_probs, scenario):
+    prompt = f"""
+        You are helping a user understand a medical diagnosis recommender system.
+        Here is a patient scenario: "{scenario}"
+        The user selected symptoms: {', '.join(selected_symptoms)}
+        The model predicted diseases: {', '.join(top_classes)} with probabilities: {top_probs}
+        The recommended specialists were: {', '.join(specialists)} with confidences: {specialist_probs}
+
+        Now the user is answering this question:
+        "{question}"
+        Options:
+        1. {options[0]}
+        2. {options[1]}
+        3. {options[2]}
+        4. {options[3]}
+
+        The correct answer is option {correct_index}, but do not reveal this unless asked.
+        Your goal is to help the user understand how the system would reason about the question and its options.
+        Keep your responses concise, clear, and focused on the question.
+        Do not provide lengthy explanations.
+        """
+    return prompt.strip()
+
+def render_v1_quiz_flow(questions, idx, scenario):
+    question = questions[idx]
+    qid = question['id']
+    st.markdown(f"### 🧠 Q{idx+1}: {question['prompt']}")
+
+    options = [question['opt1'], question['opt2'], question['opt3'], question['opt4']]
+
+    selected_option_key = f"selected_option_q_{qid}"
+    radio_key = f"option_radio_q_{qid}"
+
+    if selected_option_key not in st.session_state:
+        st.session_state[selected_option_key] = None
+
+    prev_selected = st.session_state[selected_option_key]
+
+    selected = st.radio(
+        "Select your answer:",
+        options,
+        index=options.index(prev_selected) if prev_selected in options else None,
+        key=radio_key
+    )
+
+    if selected != prev_selected:
+        st.session_state[selected_option_key] = selected
+
+    correct = question['correct_index']
+    chosen = options.index(selected) + 1 if selected in options else None
+
+    if chosen:
+        if chosen == correct:
+            st.success("✅ Correct!")
+        else:
+            st.error(f"❌ Incorrect.")
+
+    if "v1_chat_history_per_q" not in st.session_state:
+        st.session_state.v1_chat_history_per_q = {}
+    if "v1_sent_system_prompt" not in st.session_state:
+        st.session_state.v1_sent_system_prompt = {}
+    if "v1_input_used" not in st.session_state:
+        st.session_state.v1_input_used = {}
+
+    if qid not in st.session_state.v1_chat_history_per_q:
+        st.session_state.v1_chat_history_per_q[qid] = []
+
+    chat_history = st.session_state.v1_chat_history_per_q[qid]
+
+    if qid not in st.session_state.v1_sent_system_prompt:
+        system_prompt = make_quiz_system_prompt(
+            question['prompt'], options, correct,
+            st.session_state.selected_symptoms_clean,
+            st.session_state.top_classes,
+            st.session_state.top_probs,
+            st.session_state.specialists,
+            st.session_state.specialists_pb,
+            scenario
+        )
+        chat_history.append({"role": "system", "content": system_prompt})
+        st.session_state.v1_sent_system_prompt[qid] = True
+
+    # render all messages (excluding system prompt)
+    for msg in chat_history:
+        if msg["role"] != "system":
+            with st.chat_message(msg['role']):
+                st.markdown(msg['content'])
+
+    if idx == st.session_state.v1_quiz_index:
+        user_input = countdown_with_form(
+            message="Ask your questions about this question before locking your answer",
+            duration_sec=COOLDOWN_TIME_SHORT,
+            form_key=f"form_q_{qid}",
+            input_key=f"input_q_{qid}"
+        )
+
+        if user_input:
+            chat_history.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            try:
+                with st.chat_message("assistant"):
+                    response_container = st.empty()
+                    assistant_text = ""
+                    for chunk in stream_llm_api(chat_history):
+                        assistant_text += chunk
+                        response_container.markdown(assistant_text + "▌")
+                    response_container.markdown(assistant_text)
+                    chat_history.append({"role": "assistant", "content": assistant_text})
+                    log_message("user", user_input)
+                    log_message("assistant", assistant_text)
+            except Exception as e:
+                with st.chat_message("assistant"):
+                    st.error(f"LLM error: {e}")
+
+    st.session_state.v1_chat_history_per_q[qid] = chat_history
+
+    if idx == st.session_state.v1_quiz_index:
+        if st.button("Next", key=f"next_btn_{idx}"):
+            st.session_state.v1_selected_options.append({
+                "question_id": question['id'],
+                "selected": chosen,
+                "correct": correct
+            })
+            st.session_state.v1_quiz_index += 1
+            st.rerun()
+
+def load_prequiz_questions(scenario):
+    if "v1_quiz_questions" not in st.session_state:
+        patient_name = ("").join(scenario.split(" ")[:2])
+        resp = supabase.table("prequiz_questions") \
+            .select("id, prompt, opt1, opt2, opt3, opt4, correct_index") \
+            .eq("patient_name", patient_name) \
+            .limit(5) \
+            .execute()
+        st.session_state.v1_quiz_questions = resp.data
+
+    return st.session_state.v1_quiz_questions
 
 # VERSION 2
 def render_v2_page():
@@ -650,8 +856,8 @@ def render_v2_explanation_flow(scenario):
         f"How did {patient_name} get these specific recommendations?"
     ]
 
-    if DEBUG:
-        questions = ['Hi', 'Thank you']
+    # if DEBUG:
+    #     questions = ['Hi', 'Thank you']
     if st.session_state.show_explain_option:
         # explain_container.markdown("**Do you want a more detailed explanation?**")
         if countdown_with_button("Please read the results carefully", COOLDOWN_TIME_SHORT, questions[0], "explain_btn"):
