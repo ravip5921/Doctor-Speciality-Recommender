@@ -400,7 +400,7 @@ def render_version_cards():
             st.rerun()
 
     with c2:
-        st.info("""**Version 1**: Prediction Model with PreQuiz.
+        st.info("""**Version 2**: Prediction Model with PreQuiz.
                 \nGet diseases predictions & specialists recommendations, along with AI-generated explanation and a pre quiz.\n\nThe pre-quiz will familiarize you with the system.""")
         if st.button("Go to Version 2"):
             st.session_state.page = "v2"
@@ -670,7 +670,7 @@ def stream_to_llm_chat(history, container):
 def render_v2_page():
     render_back_button("v2")
     st.title("Doctor Specialist Recommender")
-    st.subheader("Version 1 - Pre-Quiz Explanation Flow")
+    st.subheader("Version 2 - Pre-Quiz Explanation Flow")
     st.divider()
 
     scenario = render_scenario(0)
@@ -757,6 +757,17 @@ def render_v2_quiz_flow(questions, idx, scenario):
 
     if selected != prev_selected:
         st.session_state[selected_option_key] = selected
+        chosen_index = options.index(selected) + 1 if selected in options else None
+        if chosen_index is not None:
+            selected_text = options[chosen_index - 1]
+            system_selected_msg = {
+                "role": "system",
+                "content": f"User's most recent or currently selected option {chosen_index}: \"{selected_text}\"."
+            }
+            # Make sure chat_history exists before appending
+            if qid not in st.session_state.v2_chat_history_per_q:
+                st.session_state.v2_chat_history_per_q[qid] = []
+            st.session_state.v2_chat_history_per_q[qid].append(system_selected_msg)
 
     correct = question['correct_index']
     chosen = options.index(selected) + 1 if selected in options else None
