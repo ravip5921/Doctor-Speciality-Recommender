@@ -990,7 +990,7 @@ def render_v1_explanation_flow(scenario):
 
     questions = [
         "Can you explain how the system takes symptoms and produces the results?",
-        f"How did {patient_name} get these specific recommendations?"
+        f"How did {patient_name} get these specific recommendations?",
         f"What if {patient_name} had different symptoms, how would that change the results?",
     ]
 
