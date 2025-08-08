@@ -894,10 +894,11 @@ def render_v1_explanation_flow(scenario):
     questions = [
         "Can you explain how the system takes symptoms and produces the results?",
         f"How did {patient_name} get these specific recommendations?"
+        f"What if {patient_name} had different symptoms, how would that change the results?",
     ]
 
     if DEBUG:
-        questions = ['Hi', 'Thank you']
+        questions = ['Hi', 'Thank you','ok']
     if st.session_state.show_explain_option:
         # explain_container.markdown("**Do you want a more detailed explanation?**")
         if countdown_with_button("Please read the results carefully", COOLDOWN_TIME_SHORT, questions[0], "explain_btn"):
@@ -910,93 +911,250 @@ def render_v1_explanation_flow(scenario):
         st.markdown("### 💬 Explanation and Follow-ups")
 
     chat_box = st.empty()
-    if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
-        render_chat_styles(chat_box)
+    # if st.session_state.initial_prompt_sent or st.session_state.explain_clicked:
+    #     render_chat_styles(chat_box)
 
     if st.session_state.explain_clicked:
-        start_llm_chat(scenario, questions, chat_box)
+        chat_box = start_llm_chat(scenario, questions)
 
     if st.session_state.initial_prompt_sent:
-        continue_llm_chat(questions, chat_box)
+        continue_llm_chat(questions)
+
+# def render_chat_transcript():
+#     """Render full transcript from session_state.chat_history (exclude system)."""
+#     if "chat_history" not in st.session_state:
+#         st.session_state.chat_history = []
+#     for msg in st.session_state.chat_history:
+#         if msg.get("role") == "system":
+#             continue
+#         with st.chat_message(msg.get("role")):
+#             st.markdown(msg.get("content"))
+    
+    
+# def render_chat_styles(chat_box):
+#     st.markdown("""
+#     <style>
+#         .scrollbox {
+#             border: 1px solid #ddd;
+#             padding: 10px;
+#             border-radius: 10px;
+#             background-color: #f9f9f9;
+#             font-size: 0.95rem;
+#         }
+#         .user-msg { color: #0b0c0c; margin-bottom: 0.5em; background-color: gainsboro; padding-top: 10px; padding-bottom: 10px;}
+#         .assistant-msg { color: #009966; margin-bottom: 1em; }
+#     </style>
+#     """, unsafe_allow_html=True)
+#     chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
 
 
-def render_chat_styles(chat_box):
-    st.markdown("""
-    <style>
-        .scrollbox {
-            border: 1px solid #ddd;
-            padding: 10px;
-            border-radius: 10px;
-            background-color: #f9f9f9;
-            font-size: 0.95rem;
-        }
-        .user-msg { color: #0b0c0c; margin-bottom: 0.5em; background-color: gainsboro; padding-top: 10px; padding-bottom: 10px;}
-        .assistant-msg { color: #009966; margin-bottom: 1em; }
-    </style>
-    """, unsafe_allow_html=True)
-    chat_box.markdown("<div id='chat' class='scrollbox'></div>", unsafe_allow_html=True)
+# def start_llm_chat(scenario, questions, chat_box):
+#     selected_symptoms_clean = st.session_state.selected_symptoms_clean
+#     top_classes = st.session_state.top_classes
+#     top_probs = st.session_state.top_probs
+#     specialist = st.session_state.specialists
+#     specialist_prob = [round(x * 100, 2) for x in st.session_state.specialists_pb]
+
+#     system_prompt = make_system_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob, scenario)
+#     st.session_state.chat_history = [
+#         {"role": "system", "content": system_prompt},
+#         {"role": "user",   "content": questions[0]}
+#     ]    
+
+#     st.session_state.initial_prompt_sent = True
+#     st.session_state.explain_clicked = False
+
+    
+#     with st.chat_message("user"):
+#         st.markdown(questions[0])
+#     try:
+#         with st.chat_message("assistant"):
+#             response_container = st.empty()
+#             assistant_text = ""
+#             for chunk in stream_llm_api(st.session_state.chat_history):
+#                 assistant_text += chunk
+#                 response_container.markdown(assistant_text + "▌")
+#             response_container.markdown(assistant_text)
+#             st.session_state.chat_history.append({"role": "assistant", "content": assistant_text})
+#             log_message("user", questions[0])
+#             log_message("assistant", assistant_text)
+#     except Exception as e:
+#         with st.chat_message("assistant"):
+#             st.error(f"LLM error: {e}")
+#     return chat_box
+
+# def continue_llm_chat(questions, chat_box):
+#     chat_box.empty()
+
+#     idx = st.session_state.followup_idx
+
+#     # Only replay transcript after Q1 → Q2 transition
+#     if idx > 1:
+#         render_chat_transcript()
+        
+#     def ask_and_advance(i):
+#         q = questions[i]
+#         st.session_state.chat_history.append({"role": "user", "content": q})
+
+#         with st.chat_message("user"):
+#             st.markdown(q)
+#         try:
+#             with st.chat_message("assistant"):
+#                 chat_box = st.empty()
+#                 assistant_text = ""
+#                 for chunk in stream_llm_api(st.session_state.chat_history):
+#                     assistant_text += chunk
+#                     chat_box.markdown(assistant_text + "▌")
+#                 chat_box.markdown(assistant_text)
+#                 st.session_state.chat_history.append({"role": "assistant", "content": assistant_text})
+#                 log_message("user", q)
+#                 log_message("assistant", assistant_text)
+
+#         except Exception as e:
+#             with st.chat_message("assistant"):
+#                 st.error(f"LLM error: {e}")
 
 
-def start_llm_chat(scenario, questions, chat_box):
-    selected_symptoms_clean = st.session_state.selected_symptoms_clean
-    top_classes = st.session_state.top_classes
-    top_probs = st.session_state.top_probs
-    specialist = st.session_state.specialists
-    specialist_prob = [round(x * 100, 2) for x in st.session_state.specialists_pb]
+#         st.session_state.followup_idx += 1
 
-    system_prompt = make_system_prompt(selected_symptoms_clean, top_classes, top_probs, specialist, specialist_prob, scenario)
+#     if idx < len(questions):
+#         if countdown_with_button(
+#             message="Please read the generated text carefully",
+#             duration_sec=COOLDOWN_TIME_LONG,
+#             button_label=questions[idx],
+#             button_key=f"followup_btn_{idx}"
+#         ):
+#             ask_and_advance(idx)
+#             st.rerun()
+
+#     if idx >= len(questions):
+#         user_input = countdown_with_form(
+#             message="Please read carefully before interacting with the chatbot",
+#             duration_sec=COOLDOWN_TIME_LONG,
+#             form_key="freeform_followup",
+#             input_key="freeform_input"
+#         )
+#         if user_input:
+#             st.session_state.chat_history.append({"role": "user", "content": user_input})
+#             with st.chat_message("user"):
+#                 st.markdown(user_input)
+#             try:
+#                 with st.chat_message("assistant"):
+#                     response_container = st.empty()
+#                     assistant_text = ""
+#                     for chunk in stream_llm_api(st.session_state.chat_history):
+#                         assistant_text += chunk
+#                         response_container.markdown(assistant_text + "▌")
+#                     response_container.markdown(assistant_text)
+#                     st.session_state.chat_history.append({"role": "assistant", "content": assistant_text})
+#                     log_message("user", user_input)
+#                     log_message("assistant", assistant_text)
+
+#             except Exception as e:
+#                 with st.chat_message("assistant"):
+#                     st.error(f"LLM error: {e}")
+
+def render_chat_transcript():
+    """Render full transcript from session_state.chat_history (exclude system)."""
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "system":
+            continue
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+
+def start_llm_chat(scenario, questions):
+    # Build system prompt & initialize history
+    system_prompt = make_system_prompt(
+        st.session_state.selected_symptoms_clean,
+        st.session_state.top_classes,
+        st.session_state.top_probs,
+        st.session_state.specialists,
+        [round(x * 100, 2) for x in st.session_state.specialists_pb],
+        scenario
+    )
+
     st.session_state.chat_history = [
         {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": questions[0]}
-    ]    
-
-    st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {questions[0]}</div>"
+        {"role": "user", "content": questions[0]}
+    ]
     st.session_state.initial_prompt_sent = True
     st.session_state.explain_clicked = False
+    st.session_state.followup_idx = 1  # reset index
+
+    # Always render what’s in history first
+    render_chat_transcript()
+
+    # Stream only for the active question (first one)
+    with st.chat_message("assistant"):
+        response_container = st.empty()
+        assistant_text = ""
+        for chunk in stream_llm_api(st.session_state.chat_history):
+            assistant_text += chunk
+            response_container.markdown(assistant_text + "▌")
+        response_container.markdown(assistant_text)
+
+    # Append the streamed message to history (so it shows next rerun)
+    st.session_state.chat_history.append({"role": "assistant", "content": assistant_text})
     log_message("user", questions[0])
-
-    assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
     log_message("assistant", assistant_text)
+    st.rerun()  # force rerun so transcript now includes it
 
-
-def continue_llm_chat(questions, chat_box):
-    chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
+def continue_llm_chat(questions):
     idx = st.session_state.followup_idx
 
-    def ask_and_advance(i):
-        q = questions[i]
-        log_message("user", q)
-        st.session_state.chat_history.append({"role": "user", "content": q})
-        st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {q}</div>"
-        chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
-        assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
-        log_message("assistant", assistant_text)
-        st.session_state.followup_idx += 1
+    # Initialize streaming flag if not set
+    if "is_streaming" not in st.session_state:
+        st.session_state.is_streaming = False
 
-    if idx < len(questions):
-        if countdown_with_button(
-            message="Please read the generated text carefully",
-            duration_sec=COOLDOWN_TIME_LONG,
-            button_label=questions[idx],
-            button_key=f"followup_btn_{idx}"
-        ):
-            ask_and_advance(idx)
+    # Render the chat transcript so far
+    render_chat_transcript()
+
+    # If streaming is active, stream the assistant's reply now
+    if st.session_state.is_streaming:
+        with st.chat_message("assistant"):
+            response_container = st.empty()
+            assistant_text = ""
+            for chunk in stream_llm_api(st.session_state.chat_history):
+                assistant_text += chunk
+                response_container.markdown(assistant_text + "▌")
+            response_container.markdown(assistant_text)
+        
+        # Update streaming flag and rerun after done
+        st.session_state.is_streaming = False
+        st.session_state.chat_history.append({"role": "assistant", "content": assistant_text})
+        st.rerun()
+
+    # Only if not streaming, render buttons/forms for next user input
+    else:
+        def ask_and_advance(q):
+            # Add user message
+            st.session_state.chat_history.append({"role": "user", "content": q})
+            st.session_state.is_streaming = True  # Set streaming flag to True for next rerun
+            st.session_state.followup_idx += 1
             st.rerun()
 
-    if idx >= len(questions):
-        user_input = countdown_with_form(
-            message="Please read carefully before interacting with the chatbot",
-            duration_sec=COOLDOWN_TIME_LONG,
-            form_key="freeform_followup",
-            input_key="freeform_input"
-        )
-        if user_input:
-            log_message("user", user_input)
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            st.session_state.chat_html += f"<div class='user-msg'><b>🧑</b> {user_input}</div>"
-            chat_box.markdown(f"<div class='scrollbox'>{st.session_state.chat_html}</div>", unsafe_allow_html=True)
-            assistant_text = stream_to_llm(st.session_state.chat_history, chat_box)
-            log_message("assistant", assistant_text)
+        # Scripted questions buttons
+        if idx < len(questions):
+            if countdown_with_button(
+                message="Please read the generated text carefully",
+                duration_sec=COOLDOWN_TIME_LONG,
+                button_label=questions[idx],
+                button_key=f"followup_btn_{idx}"
+            ):
+                ask_and_advance(questions[idx])
+        # Free-form input
+        else:
+            user_input = countdown_with_form(
+                message="Please read carefully before interacting with the chatbot",
+                duration_sec=COOLDOWN_TIME_LONG,
+                form_key="freeform_followup",
+                input_key="freeform_input"
+            )
+            if user_input:
+                ask_and_advance(user_input)
 
 if st.session_state.page == "home":
     render_home_page()
