@@ -334,16 +334,6 @@ def render_name_input():
                 debug_log("User Name empty after start press")
             else:
                 st.success(f"Hello, {st.session_state['user_name'].strip()}!")
-                # Set cooldown overrides for test user
-                if user.lower() == "test":
-                    st.session_state["COOLDOWN_TIME_LONG"] = 5
-                    st.session_state["COOLDOWN_TIME_SHORT"] = 5
-                    st.session_state["NO_COOLDOWN"] = 5
-                else:
-                    # Reset to defaults if needed
-                    st.session_state["COOLDOWN_TIME_LONG"] = COOLDOWN_TIME_LONG
-                    st.session_state["COOLDOWN_TIME_SHORT"] = COOLDOWN_TIME_SHORT
-                    st.session_state["NO_COOLDOWN"] = NO_COOLDOWN
             st.rerun()
 
 
@@ -354,6 +344,18 @@ def load_scenarios_if_needed():
         random.shuffle(scenarios)
         st.session_state.selected_scenarios = scenarios[:3] if len(scenarios) >= 3 else scenarios
         st.session_state.scenarios_loaded = True
+    # Set cooldown overrides for test user
+    user = st.session_state["user_name"].strip()
+
+    if user.lower() == "test":
+        st.session_state["COOLDOWN_TIME_LONG"] = 5
+        st.session_state["COOLDOWN_TIME_SHORT"] = 5
+        st.session_state["NO_COOLDOWN"] = 5
+    else:
+        # Reset to defaults if needed
+        st.session_state["COOLDOWN_TIME_LONG"] = COOLDOWN_TIME_LONG
+        st.session_state["COOLDOWN_TIME_SHORT"] = COOLDOWN_TIME_SHORT
+        st.session_state["NO_COOLDOWN"] = NO_COOLDOWN
 
 
 def ensure_scenario_log():
