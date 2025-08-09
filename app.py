@@ -284,7 +284,7 @@ def display_stalemate_text():
                 </button>
             </a>
         """
-    countdown_component_html("Please read the given text carefully", COOLDOWN_TIME_LONG, reveal_button_html)
+    countdown_component_html("Please read the given text carefully", st.session_state.get("COOLDOWN_TIME_LONG", COOLDOWN_TIME_LONG), reveal_button_html)
 
 
 
@@ -328,11 +328,22 @@ def render_name_input():
     with submit_col:
         if st.button("Start"):
             debug_log("Start Pressed")
-            if st.session_state["user_name"].strip() == "":
+            user = st.session_state["user_name"].strip()
+            if user == "":
                 st.warning("Please enter at least one character for your name.")
                 debug_log("User Name empty after start press")
             else:
                 st.success(f"Hello, {st.session_state['user_name'].strip()}!")
+                # Set cooldown overrides for test user
+                if user.lower() == "test":
+                    st.session_state["COOLDOWN_TIME_LONG"] = 5
+                    st.session_state["COOLDOWN_TIME_SHORT"] = 5
+                    st.session_state["NO_COOLDOWN"] = 5
+                else:
+                    # Reset to defaults if needed
+                    st.session_state["COOLDOWN_TIME_LONG"] = COOLDOWN_TIME_LONG
+                    st.session_state["COOLDOWN_TIME_SHORT"] = COOLDOWN_TIME_SHORT
+                    st.session_state["NO_COOLDOWN"] = NO_COOLDOWN
             st.rerun()
 
 
@@ -842,8 +853,8 @@ def render_v2_quiz_flow(questions, idx, scenario):
             else:
                 # Not streaming → show form to collect user input
                 user_input = countdown_with_form(
-                    message="Read the text carefully and answer the question",
-                    duration_sec=NO_COOLDOWN,
+                    message="Please read the text question carefully before answering.",
+                    duration_sec=st.session_state.get("COOLDOWN_TIME_SHORT", COOLDOWN_TIME_SHORT),
                     form_key=f"form_q_{qid}",
                     input_key=f"input_q_{qid}"
                 )
@@ -925,8 +936,8 @@ def render_v2_quiz_flow(questions, idx, scenario):
                 else:
                     # Show freeform input form
                     user_input = countdown_with_form(
-                        message="Any final thoughts or questions?",
-                        duration_sec=NO_COOLDOWN,
+                        message="Please wait",
+                        duration_sec=st.session_state.get("COOLDOWN_TIME_LONG", COOLDOWN_TIME_LONG),
                         form_key="final_freeform_form",
                         input_key="final_freeform_input"
                     )
@@ -1009,7 +1020,7 @@ def render_v1_explanation_flow(scenario):
         questions = ['Hi', 'Thank you','ok']
     if st.session_state.show_explain_option:
         # explain_container.markdown("**Do you want a more detailed explanation?**")
-        if countdown_with_button("Please read the results carefully", COOLDOWN_TIME_SHORT, questions[0], "explain_btn"):
+        if countdown_with_button("Please read the results carefully", st.session_state.get("COOLDOWN_TIME_SHORT", COOLDOWN_TIME_SHORT), questions[0], "explain_btn"):
             st.session_state.show_explain_option = False
             st.session_state.explain_clicked = True
             explain_container.empty()
@@ -1248,7 +1259,7 @@ def continue_llm_chat(questions):
         if idx < len(questions):
             if countdown_with_button(
                 message="Please read the generated text carefully",
-                duration_sec=COOLDOWN_TIME_LONG,
+                duration_sec=st.session_state.get("COOLDOWN_TIME_LONG", COOLDOWN_TIME_LONG),
                 button_label=questions[idx],
                 button_key=f"followup_btn_{idx}"
             ):
@@ -1257,7 +1268,7 @@ def continue_llm_chat(questions):
         else:
             user_input = countdown_with_form(
                 message="Please read carefully before interacting with the chatbot",
-                duration_sec=COOLDOWN_TIME_LONG,
+                duration_sec=st.session_state.get("COOLDOWN_TIME_LONG", COOLDOWN_TIME_LONG),
                 form_key="freeform_followup",
                 input_key="freeform_input"
             )
