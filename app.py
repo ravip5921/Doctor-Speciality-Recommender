@@ -91,17 +91,8 @@ def encode_symptoms(input_symptoms, all_symptoms):
             df.at[0, sym] = 1
     return df
 
-def make_system_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob, scenario):
-    """
-    Construct the system prompt explaining the two-model 
-    architecture and the specific inputs/outputs for this session.
-    """
-    return f"""
-            You are a medical explainer/chatbot designed to provide explanations of the reasoning behind the results of a machine learning system explained below. 
-            The users are presented with a patient scenario and they input symptoms based on that particular scenario to the system to get diseases predictions and specialists recommendations.
-            The goal is to enhance users' comprehension of how the symptoms can be related with those of some disease and why the patient should consult the recommended specialists. 
-            
-            Below is the **exact system design** as implemented in our code:
+CORE_SYSTEM_KNOWLEDGE = """
+Below is the **exact system design** as implemented in our code:
             
             1. Disease Prediction Model (Random Forest):
             - Input features: a binary symptom vector indicating presence (1) or absence (0) of each reported symptom.
@@ -118,6 +109,19 @@ def make_system_prompt(symptoms, top_classes, top_probs, specialist, specialist_
                 • Learns a weight matrix W and bias vector b such that for each specialist j, the model computes z_j = W_j·x + b_j.
                 • Applies the softmax function over z_j to obtain specialist probabilities.
             - Final output: a probability distribution over specialists, from which the top 2 are selected.
+"""
+
+def make_system_prompt(symptoms, top_classes, top_probs, specialist, specialist_prob, scenario,core_system_knowledge=CORE_SYSTEM_KNOWLEDGE):
+    """
+    Construct the system prompt explaining the two-model 
+    architecture and the specific inputs/outputs for this session.
+    """
+    return f"""
+            You are a medical explainer/chatbot designed to provide explanations of the reasoning behind the results of a machine learning system explained below. 
+            The users are presented with a patient scenario and they input symptoms based on that particular scenario to the system to get diseases predictions and specialists recommendations.
+            The goal is to enhance users' comprehension of how the symptoms can be related with those of some disease and why the patient should consult the recommended specialists. 
+            
+            {core_system_knowledge}
 
             System Inputs and Outputs for This Session:
 
@@ -539,7 +543,7 @@ def countdown_component_html(message, duration_sec, reveal_html):
     
     html_code = f"""
     <div style="font-weight:bold;font-size:16px;">
-        <span id="timer">{message} — {remaining//60:02d}:{remaining%60:02d}</span>
+        <span id="timer">{message} - {remaining//60:02d}:{remaining%60:02d}</span>
     </div>
 
     <div id="reveal-section" style="display:none; margin-top:10px;">
@@ -555,7 +559,7 @@ def countdown_component_html(message, duration_sec, reveal_html):
             seconds--;
             var mins = Math.floor(seconds/60);
             var secs = seconds % 60;
-            timerElement.innerHTML = "{message} — " + 
+            timerElement.innerHTML = "{message} - " + 
                 (mins<10?"0":"") + mins + ":" + (secs<10?"0":"") + secs;
         }} else {{
             clearInterval(countdown);
@@ -576,7 +580,7 @@ def countdown_with_button(message, duration_sec, button_label, button_key):
         placeholder = st.empty()
         for remaining in range(duration_sec, 0, -1):
             mins, secs = divmod(remaining, 60)
-            placeholder.markdown(f"**{message} — {mins:02d}:{secs:02d}**")
+            placeholder.markdown(f"**{message} - {mins:02d}:{secs:02d}**")
             time.sleep(1)
         placeholder.empty()
         st.session_state[f"{button_key}_done"] = True
@@ -596,7 +600,7 @@ def countdown_with_form(message, duration_sec, form_key, input_key, submit_label
         placeholder = st.empty()
         for remaining in range(duration_sec, 0, -1):
             mins, secs = divmod(remaining, 60)
-            placeholder.markdown(f"**{message} — {mins:02d}:{secs:02d}**")
+            placeholder.markdown(f"**{message} - {mins:02d}:{secs:02d}**")
             time.sleep(1)
         placeholder.empty()
         st.session_state[f"{form_key}_done"] = True
@@ -639,7 +643,7 @@ def stream_llm_api(history):
                         print("⚠️ Chunk parsing error:", parse_err)
                         continue
     except requests.RequestException as e:
-        st.markdown("LLM stream error: {e}")
+        st.error(f"LLM stream error: {e}")
         # raise RuntimeError(f"LLM stream failed: {e}")
 
 
@@ -723,27 +727,48 @@ def render_v2_page():
             for i in range(idx + 1):
                 render_v2_quiz_flow(questions, i, scenario)
 
-def make_quiz_system_prompt(question, options, correct_index, selected_symptoms, top_classes, top_probs, specialists, specialist_probs, scenario):
+def make_quiz_system_prompt(question, options, correct_index, selected_symptoms, top_classes, top_probs, specialists, specialist_probs, scenario, core_system_knowledge=CORE_SYSTEM_KNOWLEDGE):
     prompt = f"""
-        You are helping a user understand a medical diagnosis recommender system.
-        Here is a patient scenario: "{scenario}"
-        The user selected symptoms: {', '.join(selected_symptoms)}
-        The model predicted diseases: {', '.join(top_classes)} with probabilities: {top_probs}
-        The recommended specialists were: {', '.join(specialists)} with confidences: {specialist_probs}
+        You are acting as an **explanation assistant** for a research-grade Explainable AI (XAI) medical diagnosis recommender system.
+        You have full internal knowledge of how the system works.
 
-        Now the user is answering this question:
+        ---
+        ## System Knowledge
+        {core_system_knowledge}
+
+        ---
+        ## Current Patient Context
+        Scenario: "{scenario}"
+        Selected symptoms: {', '.join(selected_symptoms)}
+        Predicted diseases: {', '.join(top_classes)} with probabilities: {top_probs}
+        Recommended specialists: {', '.join(specialists)} with confidences: {specialist_probs}
+
+        ---
+        ## Current Quiz Task
+        The user is working through a **pre-quiz** designed to prepare them for a longer comprehension test.
+        They are answering the following question:
+
         "{question}"
+
         Options:
         1. {options[0]}
         2. {options[1]}
         3. {options[2]}
         4. {options[3]}
 
-        The correct answer is option {correct_index}, but do not reveal this unless asked.
-        Your goal is to help the user understand how the system would reason about the question and its options.
-        Keep your responses concise, clear, and focused on the question.
-        Do not provide lengthy explanations.
-        """
+        The correct answer is **option {correct_index}**, but you must NOT reveal or directly confirm the answer unless explicitly asked.
+
+        ---
+        ## Your Role & Style Guide
+        - Your main goal is to help the user **apply system reasoning** to evaluate the question and narrow down the correct answer.
+        - Encourage step-by-step reasoning based on the system's predictions, confidence scores, and reasoning logic.
+        - Compare relevant options, point out why some are less likely, and help them eliminate incorrect choices.
+        - Avoid generic medical advice; always tie reasoning back to **how this specific system** would think.
+        - Keep explanations **short, targeted, and context-aware** - no long lectures.
+        - If the user seems unsure, ask small guiding questions rather than giving away the answer.
+
+        Respond in a **supportive and educational tone**.
+            """
     return prompt.strip()
 
 def render_v2_quiz_flow(questions, idx, scenario):
@@ -907,7 +932,8 @@ def render_v2_quiz_flow(questions, idx, scenario):
                     st.session_state.top_probs,
                     st.session_state.specialists,
                     [round(x * 100, 2) for x in st.session_state.specialists_pb],
-                    scenario
+                    scenario,
+                    core_system_knowledge=CORE_SYSTEM_KNOWLEDGE
                 )
                 if "final_chat_history" not in st.session_state:
                     st.session_state.final_chat_history = [
@@ -1196,7 +1222,8 @@ def start_llm_chat(scenario, questions):
         st.session_state.top_probs,
         st.session_state.specialists,
         [round(x * 100, 2) for x in st.session_state.specialists_pb],
-        scenario
+        scenario,
+        core_system_knowledge=CORE_SYSTEM_KNOWLEDGE
     )
 
     st.session_state.chat_history = [
@@ -1207,7 +1234,7 @@ def start_llm_chat(scenario, questions):
     st.session_state.explain_clicked = False
     st.session_state.followup_idx = 1  # reset index
 
-    # Always render what’s in history first
+    # Always render what's in history first
     render_chat_transcript()
 
     # Stream only for the active question (first one)

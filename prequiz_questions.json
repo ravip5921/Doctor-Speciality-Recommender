@@ -13,54 +13,54 @@
     {
       "question": "Why might Michael's symptoms lead the model to favor Chicken Pox over Hepatitis C?",
       "options": [
-        "Because Chicken Pox symptoms like red spots and skin rash are more distinctively matched by decision trees.",
         "Because Hepatitis C has fewer symptoms in the training data.",
-        "Because skin-related symptoms always override internal disease predictions.",
-        "Because Hepatitis C has been deprioritized in this version of the model."
+        "Because skin-related symptoms always are always chosen over internal disease predictions.",
+        "Because Chicken Pox symptoms like red spots and skin rash are more distinctively matched by decision trees.",
+        "Because Hepatitis C has been ignored in this version of the model for simplicity."
       ],
-      "answer": "1"
+      "answer": "3"
     },
     {
-      "question": "If Michael had reported no rash but more fatigue and jaundice, what would the model likely do?",
+      "question": "If Michael had reported no rash but more tiredness and yellowing of the skin, what would the system most likely do?",
       "options": [
-        "Shift probability toward liver-related conditions like Hepatitis C.",
-        "Still predict Chicken Pox due to symptom memory.",
-        "Increase confidence in Acne.",
-        "Predict a neurological issue due to fatigue."
+        "It would still guess Chicken Pox because it remembered earlier symptoms.",
+        "It would focus more on liver problems like Hepatitis C.",
+        "It would think it's a skin issue like Acne because of past signs.",
+        "It would suggest a brain-related problem just because he's tired."
       ],
-      "answer": "1"
+      "answer": "2"
     }
   ],
   "JaneSmith": [
     {
-      "question": "How does the specialist model decide who Jane should see based on predicted diseases?",
+      "question": "How does the system decide which specialist Jane should see based on her predicted illnesses?",
       "options": [
-        "It uses weighted probabilities from disease predictions to rank relevant specialists.",
-        "It assigns a specialist at random based on current symptoms.",
-        "It only considers the top disease and maps a specialist accordingly.",
-        "It uses alphabetical matching between disease and specialist names."
+        "It randomly chooses a specialist based on her symptoms.",
+        "It uses probabilities from disease predictions to rank relevant specialists.",
+        "It uses only the most likely illness to assign a specialist.",
+        "It matches illness and specialist names alphabetically."
       ],
-      "answer": "1"
+      "answer": "2"
     },
     {
-      "question": "Why might Jane be recommended a gastroenterologist rather than a general physician?",
+      "question": "Why might Jane be recommended a gastroenterologist instead of a general physician?",
       "options": [
-        "Because her symptoms point to digestive tract involvement, which the model detects.",
-        "Because general physicians are deprioritized for vomiting cases.",
-        "Because she had previously seen a gastroenterologist.",
-        "Because abdominal pain always routes to that specialist."
+        "Because the system avoids general doctors for vomiting-related symptoms.",
+        "Because she was matched based on past visits to a specialist.",
+        "Because her symptoms suggest digestive issues, which the system picks up.",
+        "Because stomach pain always leads to a gastroenterologist by default."
       ],
-      "answer": "1"
+      "answer": "3"
     },
     {
-      "question": "If Jane also reported a sore throat and no vomiting, how would the model's recommendations likely change?",
+      "question": "If Jane also reported a sore throat and no vomiting, how would the system's recommendations likely change?",
       "options": [
-        "It might shift toward an ENT specialist or general physician.",
-        "It would increase the score for gastroenterologists.",
-        "It would prioritize neurologists.",
-        "It would make no change."
+        "It would raise the chances of seeing a stomach specialist.",
+        "It would likely suggest a brain specialist instead.",
+        "It would keep the same recommendation as before.",
+        "It might shift toward an ENT doctor or general physician."
       ],
-      "answer": "1"
+      "answer": "4"
     }
   ],
   "AliceJohnson": [
@@ -77,54 +77,54 @@
     {
       "question": "Why might the model prioritize neurological conditions for Alice over infections or cardiac problems?",
       "options": [
-        "Because the combination of symptoms (visual issues, headache, speech slurring) is more strongly linked to neurological issues in its training data.",
         "Because visual symptoms automatically imply a brain issue.",
         "Because infections were not included in the model for her age group.",
+        "Because her symptoms match brain issues more closely in the training data.",
         "Because Alice selected 'neurology' herself."
       ],
-      "answer": "1"
+      "answer": "3"
     },
     {
       "question": "If Alice also had numbness in her arm and facial droop, how would the system likely respond?",
       "options": [
-        "It would increase the likelihood of recommending a neurologist and flag stroke-related conditions.",
-        "It would downgrade visual disturbances.",
-        "It would switch focus to ENT problems.",
-        "It would recommend dermatology."
+        "It would lower the score for vision-related symptoms.",
+        "It would shift focus to ear and throat conditions.",
+        "It would recommend a skin specialist instead.",
+        "It would raise stroke risk and probably suggest a brain specialist."
       ],
-      "answer": "1"
+      "answer": "4"
     }
   ],
   "EmilyDavis": [
     {
-      "question": "What does the model use to recommend specialists after predicting diseases from Emily's symptoms?",
+      "question": "What does the system use to recommend specialists after predicting diseases from Emily's symptoms?",
       "options": [
-        "It applies a logistic regression model using disease probabilities to rank specialists.",
         "It flips a coin if multiple diseases are detected.",
+        "It applies a logistic regression system using disease probabilities to rank specialists.",
         "It checks which diseases are more serious and recommends based on severity.",
         "It uses a lookup table based on disease names."
       ],
-      "answer": "1"
+      "answer": "2"
     },
     {
       "question": "Why is internal medicine recommended for Emily over cardiology or allergy?",
       "options": [
-        "Because malaria is most likely and falls under internal medicine based on training data patterns.",
-        "Because cardiologists aren't in the model.",
+        "Because malaria is most likely and linked to internal medicine in the training data.",
+        "Because heart doctors(Cardiologists) aren't included in the system's optiona.",
         "Because internal medicine is always the default recommendation.",
-        "Because fever always routes to internal medicine."
+        "Because fever always routes to internal medicine as per the system design."
       ],
       "answer": "1"
     },
     {
-      "question": "If Emily's fever dropped but she developed an itchy rash, what would the model likely do?",
+      "question": "If Emily's fever dropped but she developed an itchy rash, what would the system likely do?",
       "options": [
-        "Shift toward allergy-related predictions and increase allergist recommendation score.",
-        "Still prioritize malaria.",
-        "Switch to dermatology as default.",
-        "Ignore changes unless more symptoms are added."
+        "It would keep malaria as the top choice despite the changes.",
+        "It woulds switch toa skin doctor by default without checking symptoms as a default behaviour.",
+        "It would ignore changes in the symptmos unless more symptoms are added.",
+        "It would shift toward allergy-related predictions and increase allergist recommendation score."
       ],
-      "answer": "1"
+      "answer": "4"
     }
   ]
 }
