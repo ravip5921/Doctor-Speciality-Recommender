@@ -350,7 +350,7 @@ def load_scenarios_if_needed():
     if user.lower() == "test":
         st.session_state["COOLDOWN_TIME_LONG"] = 5
         st.session_state["COOLDOWN_TIME_SHORT"] = 5
-        st.session_state["NO_COOLDOWN"] = 5
+        st.session_state["NO_COOLDOWN"] = 0
     else:
         # Reset to defaults if needed
         st.session_state["COOLDOWN_TIME_LONG"] = COOLDOWN_TIME_LONG
@@ -853,10 +853,12 @@ def render_v2_quiz_flow(questions, idx, scenario):
                 # If final chat is showing, skip rendering per-question input form
                 pass
             else:
+                st.markdown("__*Please use the chatbot below to find out the correct answer.*__")
+
                 # Not streaming → show form to collect user input
                 user_input = countdown_with_form(
                     message="Please read the text question carefully before answering.",
-                    duration_sec=st.session_state.get("COOLDOWN_TIME_SHORT", COOLDOWN_TIME_SHORT),
+                    duration_sec=st.session_state.get("NO_COOLDOWN", NO_COOLDOWN),
                     form_key=f"form_q_{qid}",
                     input_key=f"input_q_{qid}"
                 )
@@ -939,7 +941,7 @@ def render_v2_quiz_flow(questions, idx, scenario):
                     # Show freeform input form
                     user_input = countdown_with_form(
                         message="Please wait",
-                        duration_sec=st.session_state.get("COOLDOWN_TIME_LONG", COOLDOWN_TIME_LONG),
+                        duration_sec=st.session_state.get("NO_COOLDOWN", NO_COOLDOWN),
                         form_key="final_freeform_form",
                         input_key="final_freeform_input"
                     )
