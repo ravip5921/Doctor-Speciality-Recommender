@@ -788,7 +788,14 @@ def render_v2_quiz_flow(questions, idx, scenario):
     qid = question['id']
     st.markdown(f"#### Q{idx+1}: {question['prompt']}")
 
-    options = [question['opt1'], question['opt2'], question['opt3'], question['opt4']]
+    options = [
+        question.get('opt1'),
+        question.get('opt2'),
+        question.get('opt3'),
+        question.get('opt4')
+    ]
+    # Remove any that are None or empty string after stripping
+    options = [opt for opt in options if opt and str(opt).strip()]
 
     selected_option_key = f"selected_option_q_{qid}"
     radio_key = f"option_radio_q_{qid}"
@@ -1009,7 +1016,7 @@ def load_prequiz_questions(scenario):
         resp = supabase.table("prequiz_questions") \
             .select("id, prompt, opt1, opt2, opt3, opt4, correct_index") \
             .eq("patient_name", patient_name) \
-            .order("id", desc=False) \
+            .order("id", desc=True) \
             .limit(3) \
             .execute()
         st.session_state.v2_quiz_questions = resp.data
