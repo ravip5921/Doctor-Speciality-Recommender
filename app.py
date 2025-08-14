@@ -728,6 +728,8 @@ def render_v2_page():
                 render_v2_quiz_flow(questions, i, scenario)
 
 def make_quiz_system_prompt(question, options, correct_index, selected_symptoms, top_classes, top_probs, specialists, specialist_probs, scenario, core_system_knowledge=CORE_SYSTEM_KNOWLEDGE):
+
+    formatted_options = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(options)])
     prompt = f"""
         You are acting as an **explanation assistant** for a research-grade Explainable AI (XAI) medical diagnosis recommender system.
         You have full internal knowledge of how the system works.
@@ -757,10 +759,7 @@ def make_quiz_system_prompt(question, options, correct_index, selected_symptoms,
         "{question}"
 
         Options:
-        1. {options[0]}
-        2. {options[1]}
-        3. {options[2]}
-        4. {options[3]}
+        {formatted_options}
 
         The correct answer is **option {correct_index}**. The user will select one of the options and you will provide feedback based on their selection.
 
@@ -804,6 +803,8 @@ def render_v2_quiz_flow(questions, idx, scenario):
         st.session_state[selected_option_key] = None
 
     prev_selected = st.session_state[selected_option_key]
+
+    st.markdown("__*Please select one of the options to know more about it.*__")
 
     selected = st.radio(
         "Select your answer:",
@@ -907,7 +908,7 @@ def render_v2_quiz_flow(questions, idx, scenario):
                 # If final chat is showing, skip rendering per-question input form
                 pass
             else:
-                st.markdown("__*Please use the chatbot below to find out the correct answer.*__")
+                st.markdown("__*Please use the chatbot below to learn more.*__")
 
                 # Not streaming → show form to collect user input
                 user_input = countdown_with_form(
