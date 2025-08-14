@@ -738,10 +738,16 @@ def make_quiz_system_prompt(question, options, correct_index, selected_symptoms,
 
         ---
         ## Current Patient Context
-        Scenario: "{scenario}"
-        Selected symptoms: {', '.join(selected_symptoms)}
-        Predicted diseases: {', '.join(top_classes)} with probabilities: {top_probs}
-        Recommended specialists: {', '.join(specialists)} with confidences: {specialist_probs}
+        - Patient Scenario: {scenario}
+        - User reported symptoms: {', '.join(selected_symptoms)}
+        - Top 3 predicted diseases: 
+            1. {top_classes[0]} ({round(top_probs[0]*100, 2)}%)
+            2. {top_classes[1]} ({round(top_probs[1]*100, 2)}%)
+            3. {top_classes[2]} ({round(top_probs[2]*100, 2)}%)
+        - Recommended specialist: 
+            1. {specialists[0]} ({round(specialist_probs[0]*100, 2)}%)
+            2. {specialists[1]} ({round(specialist_probs[1]*100, 2)}%)
+        
 
         ---
         ## Current Quiz Task
@@ -756,16 +762,22 @@ def make_quiz_system_prompt(question, options, correct_index, selected_symptoms,
         3. {options[2]}
         4. {options[3]}
 
-        The correct answer is **option {correct_index}**, but you must NOT reveal or directly confirm the answer unless explicitly asked.
+        The correct answer is **option {correct_index}**. The user will select one of the options and you will provide feedback based on their selection.
 
         ---
+        ## Special Instructions
+        - If the user says "Option [OPTION NUMBER] has been selected", you should respond as follows:'
+            - If the user selects the correct answer, explain why it is correct and if not done yet, explain about the system too.
+            - If they select an incorrect answer, provide explanation on why it was wrong and guide them to the correct reasoning.
+        - The first time the user selects an option, you should give a brief explaination of the system and how it works and then begin to answer as per the specific option selected.
+        
         ## Your Role & Style Guide
-        - Your main goal is to help the user **apply system reasoning** to evaluate the question and narrow down the correct answer.
+        - Your main goal is to help the user **understand the system reasoning** and explain why the selected options are either correct or not.
         - Encourage step-by-step reasoning based on the system's predictions, confidence scores, and reasoning logic.
-        - Compare relevant options, point out why some are less likely, and help them eliminate incorrect choices.
         - Avoid generic medical advice; always tie reasoning back to **how this specific system** would think.
         - Keep explanations **short, targeted, and context-aware** - no long lectures.
-        - If the user seems unsure, ask small guiding questions rather than giving away the answer.
+        - If the user asks follow up questions and seems unsure, ask small guiding questions rather than giving away the answer if they have not selected the correct option yet.
+        - When explaining, use simple language and avoid technical jargon unless the user asks for it.
 
         Respond in a **supportive and educational tone**.
             """
@@ -792,20 +804,30 @@ def render_v2_quiz_flow(questions, idx, scenario):
         index=options.index(prev_selected) if prev_selected in options else None,
         key=radio_key
     )
-
     if selected != prev_selected:
         st.session_state[selected_option_key] = selected
         chosen_index = options.index(selected) + 1 if selected in options else None
         if chosen_index is not None:
-            selected_text = options[chosen_index - 1]
-            system_selected_msg = {
-                "role": "system",
-                "content": f"User's most recent or currently selected option {chosen_index}: \"{selected_text}\"."
-            }
-            # Make sure chat_history exists before appending
+            selection_msg = f"Option {chosen_index} has been selected."
+
+            # Ensure chat history for this question exists
             if qid not in st.session_state.v2_chat_history_per_q:
                 st.session_state.v2_chat_history_per_q[qid] = []
-            st.session_state.v2_chat_history_per_q[qid].append(system_selected_msg)
+            chat_history = st.session_state.v2_chat_history_per_q[qid]
+
+            # Append to history
+            chat_history.append({"role": "user", "content": selection_msg})
+
+            # Show immediately
+            with st.chat_message("user"):
+                st.markdown(selection_msg)
+
+            # Trigger LLM streaming next run
+            streaming_flag_key = f"v2_is_streaming_{qid}"
+            st.session_state[streaming_flag_key] = True
+
+            st.rerun()
+
 
     correct = question['correct_index']
     chosen = options.index(selected) + 1 if selected in options else None
