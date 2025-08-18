@@ -929,7 +929,7 @@ def render_v2_quiz_flow(questions, idx, scenario):
         # Show Next / Finish button logic
         if st.session_state.v2_quiz_index < len(questions) - 1:
             # For all but last question, show normal Next button
-            if st.button("Next", key=f"next_btn_{idx}"):
+            if st.button("Next Question", key=f"next_btn_{idx}"):
                 st.session_state.v2_selected_options.append({
                     "question_id": question['id'],
                     "selected": chosen,
@@ -1020,7 +1020,8 @@ def load_prequiz_questions(scenario):
             .order("id", desc=True) \
             .limit(3) \
             .execute()
-        st.session_state.v2_quiz_questions = resp.data
+        sorted_data = sorted(resp.data, key=lambda x: x["id"])
+        st.session_state.v2_quiz_questions = sorted_data
 
     return st.session_state.v2_quiz_questions
 
