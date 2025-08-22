@@ -1328,6 +1328,8 @@ def continue_llm_chat(questions):
                 ask_and_advance(questions[idx])
         # Free-form input
         else:
+            st.markdown("---")
+            st.markdown("#### 📝 Do you have any other questions?")
             user_input = countdown_with_form(
                 message="Please read carefully before interacting with the chatbot",
                 duration_sec=st.session_state.get("COOLDOWN_TIME_LONG", COOLDOWN_TIME_LONG),
