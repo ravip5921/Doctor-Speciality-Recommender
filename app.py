@@ -687,7 +687,7 @@ def stream_to_llm_chat(history, container):
 def render_v2_page():
     render_back_button("v2")
     st.title("Doctor Specialist Recommender")
-    st.subheader("Version 2 - Pre-Quiz Explanation Flow")
+    # st.subheader("Version 2 - Pre-Quiz Explanation Flow")
     st.divider()
 
     scenario = render_scenario(0)
@@ -1029,7 +1029,7 @@ def load_prequiz_questions(scenario):
 def render_v1_page():
     render_back_button("v1")
     st.title("Doctor Specialist Recommender")
-    st.subheader("Version 1 - Prediction Model with AI Chatbot")
+    # st.subheader("Version 1 - Prediction Model with AI Chatbot")
     st.divider()
 
     scenario = render_scenario(2)
