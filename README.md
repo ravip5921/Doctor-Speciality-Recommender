@@ -27,6 +27,14 @@ These two versions are tested in a **2×2 within-subjects factorial design**, us
   * Explore qualitative user experiences, including clarity, difficulty, and interaction preferences.
 
 ---
+## Architecture & Design Overview
+
+### Summary
+The Doctor Speciality Recommender is a web application with distinct frontend and backend components that together support symptom input, disease prediction, specialist recommendation, and LLM-driven explanation. The system pipeline is: user → symptom encoder → Random Forest disease predictor → one-hot top-3 disease encoder → multinomial logistic regression specialist recommender → contextual prompt builder → LLM chatbot → user. The app also logs interactions and quiz outcomes to a Supabase backend for study data collection.
+
+## Architecture Diagram
+
+![Architecture Diagram](images/architecture.png)
 
 ## SETUP
 
@@ -123,3 +131,15 @@ GitHub repository:
 [https://github.com/ravip5921/DoctorSpecialityRecommender-Quiz](https://github.com/ravip5921/DoctorSpecialityRecommender-Quiz)
 
 ---
+
+## Demo screenshots
+
+### Main Menu
+![Main Menu](images/demo/main.png)
+
+### Version 1
+![Version 1.a](images/demo/v1-1.png)
+![Version 1.b](images/demo/v1-2.png)
+
+### Version 2
+![Version 2](images/demo/v2.png)
